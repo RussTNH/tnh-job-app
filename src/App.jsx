@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "./lib/supabase";
 import { QRCodeCanvas } from "qrcode.react";
 import jsPDF from "jspdf";
 
