@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
-import QRCode from "qrcode.react";
+import { QRCodeCanvas } from "qrcode.react";
 import jsPDF from "jspdf";
 
 const supabaseUrl = "YOUR_SUPABASE_URL";
@@ -133,7 +133,7 @@ export default function App() {
               </div>
 
               <div className="mt-2">
-                <QRCode value={job.job_number} size={80} />
+                <QRCodeCanvas value={job.job_number} size={80} />
               </div>
             </div>
           ))}
