@@ -1,27 +1,42 @@
-import { Outlet, Link } from "react-router-dom";
+import { Outlet, Link, useLocation } from "react-router-dom";
 
 export default function Layout() {
+  const location = useLocation();
+
+  const linkClass = (path) =>
+    `px-3 py-2 rounded-lg transition ${
+      location.pathname === path
+        ? "bg-blue-600 text-white"
+        : "text-gray-300 hover:bg-gray-700"
+    }`;
+
   return (
-    <div style={{ display: "flex", height: "100vh" }}>
+    <div className="flex h-screen bg-gray-900 text-white">
 
       {/* SIDEBAR */}
-      <div style={{ width: "250px", background: "black", color: "white", padding: "20px" }}>
-        <h2>TNH System</h2>
+      <aside className="w-64 bg-gray-800 p-5 flex flex-col">
+        <h1 className="text-2xl font-bold mb-8">🔧 TNH System</h1>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-          <Link to="/">Dashboard</Link>
-          <Link to="/jobs">Jobs</Link>
-          <Link to="/create">New Job</Link>
-          <Link to="/admin/users">Users</Link>
-          <Link to="/admin/settings">Settings</Link>
+        <nav className="flex flex-col gap-2">
+          <Link to="/" className={linkClass("/")}>Dashboard</Link>
+          <Link to="/jobs" className={linkClass("/jobs")}>Jobs</Link>
+          <Link to="/create" className={linkClass("/create")}>New Job</Link>
+
+          <div className="mt-6 text-xs text-gray-400">ADMIN</div>
+
+          <Link to="/admin/users" className={linkClass("/admin/users")}>Users</Link>
+          <Link to="/admin/settings" className={linkClass("/admin/settings")}>Settings</Link>
+        </nav>
+
+        <div className="mt-auto text-xs text-gray-500">
+          TNH v1.0
         </div>
-      </div>
+      </aside>
 
       {/* MAIN */}
-      <div style={{ flex: 1, padding: "20px" }}>
+      <main className="flex-1 bg-gray-100 text-black p-6 overflow-y-auto">
         <Outlet />
-      </div>
-
+      </main>
     </div>
   );
 }

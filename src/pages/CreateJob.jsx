@@ -1,3 +1,11 @@
-export default function CreateJob() {
-  return <h1>Create Job Page (coming next)</h1>;
+export default function Jobs() {
+  return (
+    <div>
+      <h1 className="text-2xl font-bold mb-6">CreateJob</h1>
+
+      <div className="bg-white rounded-xl shadow p-4">
+        <p className="text-gray-500">Job list coming next...</p>
+      </div>
+    </div>
+  );
 }

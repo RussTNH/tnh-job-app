@@ -1,3 +1,11 @@
 export default function Jobs() {
-  return <h1>Jobs Page (coming next)</h1>;
+  return (
+    <div>
+      <h1 className="text-2xl font-bold mb-6">Jobs</h1>
+
+      <div className="bg-white rounded-xl shadow p-4">
+        <p className="text-gray-500">Job list coming next...</p>
+      </div>
+    </div>
+  );
 }
