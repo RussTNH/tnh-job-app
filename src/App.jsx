@@ -3,9 +3,8 @@ import { supabase } from "./lib/supabase";
 import { QRCodeCanvas } from "qrcode.react";
 import jsPDF from "jspdf";
 
-const supabaseUrl = "YOUR_SUPABASE_URL";
-const supabaseKey = "YOUR_SUPABASE_ANON_KEY";
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabaseUrl = https://ukcrqatwnkkwwzkhuxsd.supabase.co;
+const supabaseKey = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVrY3JxYXR3bmtrd3d6a2h1eHNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU4MTQ2NjYsImV4cCI6MjA5MTM5MDY2Nn0.R-afVoCs5NWTyl9i244rxLgUW49Lg_OOL8zHiYhlba4;
 
 export default function App() {
   const [jobs, setJobs] = useState([]);
