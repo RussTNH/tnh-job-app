@@ -13,6 +13,7 @@ import CreateJob from "./pages/CreateJob";
 import JobDetail from "./pages/JobDetail";
 import AdminUsers from "./pages/AdminUsers";
 import AdminSettings from "./pages/AdminSettings";
+import AuditLog from "./pages/AuditLog";
 
 export default function App() {
   const [session, setSession] = useState(null);
@@ -122,10 +123,10 @@ export default function App() {
           path="/"
           element={
             <ProtectedRoute
-  session={session}
-  profile={profile}
-  profileLoading={profileLoading}
->
+              session={session}
+              profile={profile}
+              profileLoading={profileLoading}
+            >
               <Layout
                 session={session}
                 profile={profile}
@@ -153,6 +154,15 @@ export default function App() {
             element={
               <AdminRoute profile={profile} profileLoading={profileLoading}>
                 <AdminSettings />
+              </AdminRoute>
+            }
+          />
+
+          <Route
+            path="admin/audit-log"
+            element={
+              <AdminRoute profile={profile} profileLoading={profileLoading}>
+                <AuditLog />
               </AdminRoute>
             }
           />

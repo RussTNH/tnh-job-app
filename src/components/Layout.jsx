@@ -1,11 +1,11 @@
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 
-export default function Layout({ session, profile }) {
+export default function Layout({ session, profile, profileLoading }) {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const isAdmin = profile?.role === "admin";
+  const isAdmin = profile?.role === "admin" && profile?.is_active;
 
   const isActive = (path) =>
     location.pathname === path ||
@@ -61,6 +61,9 @@ export default function Layout({ session, profile }) {
                 <Link to="/admin/settings" className={navClass("/admin/settings")}>
                   Settings
                 </Link>
+                <Link to="/admin/audit-log" className={navClass("/admin/audit-log")}>
+                  Audit Log
+                </Link>
               </>
             ) : null}
           </nav>
@@ -74,12 +77,14 @@ export default function Layout({ session, profile }) {
             <div className="mt-3 flex flex-wrap gap-2">
               <span
                 className={`inline-flex rounded-full border px-3 py-1 text-xs ${
-                  isAdmin
+                  profileLoading
+                    ? "border-slate-600 bg-slate-700/40 text-slate-200"
+                    : isAdmin
                     ? "border-violet-500/30 bg-violet-500/15 text-violet-200"
                     : "border-slate-600 bg-slate-700/40 text-slate-200"
                 }`}
               >
-                {profile?.role || "staff"}
+                {profileLoading ? "Loading role..." : profile?.role || "staff"}
               </span>
 
               <span
@@ -120,7 +125,11 @@ export default function Layout({ session, profile }) {
                 </div>
 
                 <div className="text-sm text-slate-400">
-                  {isAdmin ? "Admin access enabled" : "Standard user access"}
+                  {profileLoading
+                    ? "Checking access..."
+                    : isAdmin
+                    ? "Admin access enabled"
+                    : "Standard user access"}
                 </div>
               </div>
             </div>
