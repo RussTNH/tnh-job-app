@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { QRCodeSVG } from "qrcode.react";
+import jsPDF from "jspdf";
 
 function safeParseParts(value) {
   if (!value) return [];
@@ -34,6 +35,7 @@ export default function JobDetail() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   const [status, setStatus] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
@@ -167,8 +169,240 @@ export default function JobDetail() {
     }
   }
 
-  function printJobSheet() {
-    window.print();
+  async function downloadJobPdf() {
+    if (!job) return;
+
+    try {
+      setDownloadingPdf(true);
+
+      const doc = new jsPDF("p", "mm", "a4");
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 12;
+      const contentWidth = pageWidth - margin * 2;
+      let y = 14;
+
+      const safeJobNumber = (job.job_number || `job-${job.id || "record"}`)
+        .replace(/[^a-z0-9-_]/gi, "_");
+
+      function ensureSpace(heightNeeded = 12) {
+        if (y + heightNeeded > pageHeight - 15) {
+          doc.addPage();
+          y = 14;
+        }
+      }
+
+      function drawHeader() {
+        doc.setFillColor(20, 27, 45);
+        doc.roundedRect(margin, y, contentWidth, 24, 3, 3, "F");
+
+        doc.setTextColor(255, 255, 255);
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(18);
+        doc.text("The Nerd Herd", margin + 6, y + 9);
+
+        doc.setFontSize(13);
+        doc.text("Workshop Job Sheet", margin + 6, y + 17);
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.text(`Job: ${job.job_number || "—"}`, pageWidth - margin - 50, y + 9);
+        doc.text(
+          `Generated: ${new Date().toLocaleString("en-GB")}`,
+          pageWidth - margin - 50,
+          y + 17
+        );
+
+        y += 30;
+        doc.setTextColor(0, 0, 0);
+      }
+
+      function sectionTitle(title) {
+        ensureSpace(14);
+        doc.setFillColor(240, 244, 248);
+        doc.roundedRect(margin, y, contentWidth, 8, 2, 2, "F");
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(11);
+        doc.text(title, margin + 4, y + 5.5);
+        y += 11;
+      }
+
+      function drawFieldRow(leftLabel, leftValue, rightLabel, rightValue) {
+        ensureSpace(14);
+
+        const rowHeight = 10;
+        const gutter = 4;
+        const boxWidth = (contentWidth - gutter) / 2;
+
+        doc.setDrawColor(210, 214, 220);
+        doc.roundedRect(margin, y, boxWidth, rowHeight, 2, 2);
+        doc.roundedRect(margin + boxWidth + gutter, y, boxWidth, rowHeight, 2, 2);
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.text(`${leftLabel}:`, margin + 3, y + 4);
+        doc.text(`${rightLabel}:`, margin + boxWidth + gutter + 3, y + 4);
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        const leftText = String(leftValue || "—");
+        const rightText = String(rightValue || "—");
+        doc.text(doc.splitTextToSize(leftText, boxWidth - 6), margin + 3, y + 8);
+        doc.text(
+          doc.splitTextToSize(rightText, boxWidth - 6),
+          margin + boxWidth + gutter + 3,
+          y + 8
+        );
+
+        y += rowHeight + 4;
+      }
+
+      function drawFullWidthField(label, value, minHeight = 14) {
+        ensureSpace(minHeight + 4);
+
+        const text = String(value || "—");
+        const textLines = doc.splitTextToSize(text, contentWidth - 6);
+        const boxHeight = Math.max(minHeight, 6 + textLines.length * 4.5);
+
+        doc.setDrawColor(210, 214, 220);
+        doc.roundedRect(margin, y, contentWidth, boxHeight, 2, 2);
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.text(`${label}:`, margin + 3, y + 4.5);
+
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(9);
+        doc.text(textLines, margin + 3, y + 9);
+
+        y += boxHeight + 4;
+      }
+
+      function drawPartsTable() {
+        const rows =
+          parts.length > 0
+            ? parts.map((part) => ({
+                name: part.name || "Unnamed part",
+                qty: String(part.qty || 1),
+                cost: donatedMode ? "Donated" : money(part.cost),
+                total: donatedMode
+                  ? "Donated"
+                  : money((Number(part.qty || 1) || 1) * (Number(part.cost || 0) || 0)),
+              }))
+            : [{ name: "No parts added", qty: "—", cost: "—", total: "—" }];
+
+        ensureSpace(18);
+
+        const col1 = margin;
+        const col2 = margin + 95;
+        const col3 = margin + 122;
+        const col4 = margin + 152;
+        const col5 = pageWidth - margin;
+
+        doc.setFillColor(240, 244, 248);
+        doc.rect(margin, y, contentWidth, 8, "F");
+        doc.setDrawColor(210, 214, 220);
+        doc.rect(margin, y, contentWidth, 8);
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.text("Part", col1 + 2, y + 5);
+        doc.text("Qty", col2 + 2, y + 5);
+        doc.text("Unit", col3 + 2, y + 5);
+        doc.text("Total", col4 + 2, y + 5);
+
+        y += 8;
+
+        rows.forEach((row) => {
+          ensureSpace(10);
+          doc.rect(margin, y, contentWidth, 8);
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(9);
+
+          doc.text(doc.splitTextToSize(row.name, 90), col1 + 2, y + 5);
+          doc.text(row.qty, col2 + 2, y + 5);
+          doc.text(row.cost, col3 + 2, y + 5);
+          doc.text(row.total, col4 + 2, y + 5);
+
+          y += 8;
+        });
+
+        y += 4;
+      }
+
+      function drawTotalsBox() {
+        ensureSpace(28);
+
+        const boxWidth = 72;
+        const x = pageWidth - margin - boxWidth;
+
+        doc.setDrawColor(210, 214, 220);
+        doc.roundedRect(x, y, boxWidth, 24, 2, 2);
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(9);
+        doc.text("Labour", x + 4, y + 6);
+        doc.text("Parts", x + 4, y + 12);
+        doc.text("Total", x + 4, y + 18);
+
+        doc.setFont("helvetica", "normal");
+        doc.text(donatedMode ? "Donated" : money(job.labour_cost), x + 32, y + 6);
+        doc.text(donatedMode ? "Donated" : money(job.parts_cost), x + 32, y + 12);
+
+        doc.setFont("helvetica", "bold");
+        doc.text(donatedMode ? "Donated" : money(job.price), x + 32, y + 18);
+
+        y += 28;
+      }
+
+      drawHeader();
+
+      sectionTitle("Customer & Device");
+      drawFieldRow("Customer", job.customer, "Contact", job.contact);
+      drawFieldRow("Device", job.device, "Model", job.model);
+      drawFieldRow("Serial Number", job.serial_number, "Asset Tag", job.asset_tag);
+      drawFieldRow("Service Type", job.service_type, "Assigned To", job.assigned_to_name || "Unassigned");
+
+      sectionTitle("Status");
+      drawFieldRow("Status", job.status, "Collected", job.collected ? "Yes" : "No");
+      drawFieldRow("Paid", job.donated ? "Donated" : job.paid ? "Yes" : "No", "Record ID", job.id);
+
+      sectionTitle("Issue Description");
+      drawFullWidthField("Reported Issue", job.issue || "—", 24);
+
+      sectionTitle("Financial Summary");
+      drawFieldRow("Quoted Price", donatedMode ? "Donated Item" : money(job.price), "Labour Cost", donatedMode ? "Donated Item" : money(job.labour_cost));
+      drawFieldRow("Parts Cost", donatedMode ? "Donated Item" : money(job.parts_cost), "Suggested Total", donatedMode ? "Donated Item" : money(suggestedTotal));
+      drawTotalsBox();
+
+      sectionTitle("Parts Used");
+      drawPartsTable();
+
+      sectionTitle("Notes / Work Log");
+      drawFullWidthField("Notes", job.notes || "No notes yet", 28);
+
+      sectionTitle("Sign-off");
+      drawFullWidthField(
+        "Customer Signature",
+        "_______________________________________________",
+        14
+      );
+      drawFieldRow(
+        "Date",
+        "________________________",
+        "Staff Signature",
+        "________________________"
+      );
+
+      pdfFooter(doc, pageWidth, pageHeight, safeJobNumber);
+
+      doc.save(`${safeJobNumber}.pdf`);
+    } catch (err) {
+      console.error("PDF generation error:", err);
+      alert("Could not generate the PDF.");
+    } finally {
+      setDownloadingPdf(false);
+    }
   }
 
   async function updateStatus() {
@@ -363,13 +597,14 @@ export default function JobDetail() {
             </p>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 xl:w-auto xl:min-w-[260px] xl:grid-cols-1 no-print">
+          <div className="grid gap-4 sm:grid-cols-2 xl:w-auto xl:min-w-[280px] xl:grid-cols-1">
             <button
               type="button"
-              onClick={printJobSheet}
-              className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-5 py-3 font-medium text-white hover:bg-slate-800"
+              onClick={downloadJobPdf}
+              disabled={downloadingPdf}
+              className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-5 py-3 font-medium text-white hover:bg-slate-800 disabled:opacity-60"
             >
-              Print Job Sheet
+              {downloadingPdf ? "Generating PDF..." : "Download Job PDF"}
             </button>
 
             <div className="flex items-center justify-center rounded-3xl border border-slate-800 bg-slate-950 p-5">
@@ -471,7 +706,7 @@ export default function JobDetail() {
                   <button
                     type="button"
                     onClick={updateAssignment}
-                    className="w-full rounded-2xl bg-slate-800 px-4 py-3 text-white hover:bg-slate-700 sm:w-auto no-print"
+                    className="w-full rounded-2xl bg-slate-800 px-4 py-3 text-white hover:bg-slate-700 sm:w-auto"
                   >
                     Save
                   </button>
@@ -493,7 +728,7 @@ export default function JobDetail() {
             <button
               type="button"
               onClick={updateJobDetails}
-              className="mt-5 w-full rounded-2xl bg-gradient-to-r from-blue-600 to-violet-600 px-5 py-3 font-medium text-white shadow-lg hover:opacity-90 sm:w-auto no-print"
+              className="mt-5 w-full rounded-2xl bg-gradient-to-r from-blue-600 to-violet-600 px-5 py-3 font-medium text-white shadow-lg hover:opacity-90 sm:w-auto"
             >
               Save Job Details
             </button>
@@ -574,7 +809,7 @@ export default function JobDetail() {
                       type="button"
                       onClick={() => removePartRow(index)}
                       disabled={donatedMode}
-                      className="w-full rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-rose-200 hover:bg-rose-500/20 disabled:opacity-60 xl:w-auto no-print"
+                      className="w-full rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-rose-200 hover:bg-rose-500/20 disabled:opacity-60 xl:w-auto"
                     >
                       Remove
                     </button>
@@ -586,7 +821,7 @@ export default function JobDetail() {
                 type="button"
                 onClick={addPartRow}
                 disabled={donatedMode}
-                className="mt-4 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white hover:bg-slate-800 disabled:opacity-60 sm:w-auto no-print"
+                className="mt-4 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white hover:bg-slate-800 disabled:opacity-60 sm:w-auto"
               >
                 + Add Part
               </button>
@@ -627,7 +862,7 @@ export default function JobDetail() {
               </label>
             </div>
 
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap no-print">
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <button
                 type="button"
                 onClick={() => setPrice(suggestedTotal.toFixed(2))}
@@ -654,13 +889,13 @@ export default function JobDetail() {
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="Add a note (e.g. diagnostics started, parts ordered...)"
-              className="input w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white no-print"
+              className="input w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
             />
 
             <button
               type="button"
               onClick={addNote}
-              className="mt-3 w-full rounded-2xl bg-blue-600 px-4 py-3 text-white hover:opacity-90 no-print"
+              className="mt-3 w-full rounded-2xl bg-blue-600 px-4 py-3 text-white hover:opacity-90"
             >
               Add Note
             </button>
@@ -691,7 +926,7 @@ export default function JobDetail() {
             <button
               type="button"
               onClick={updateStatus}
-              className="mt-4 w-full rounded-2xl bg-gradient-to-r from-blue-600 to-violet-600 px-4 py-3 font-medium text-white shadow-lg hover:opacity-90 no-print"
+              className="mt-4 w-full rounded-2xl bg-gradient-to-r from-blue-600 to-violet-600 px-4 py-3 font-medium text-white shadow-lg hover:opacity-90"
             >
               Save Status
             </button>
@@ -712,7 +947,7 @@ export default function JobDetail() {
             </div>
           </div>
 
-          <div className="rounded-3xl border border-rose-500/20 bg-slate-900 p-6 shadow-xl no-print">
+          <div className="rounded-3xl border border-rose-500/20 bg-slate-900 p-6 shadow-xl">
             <h2 className="mb-3 text-xl font-semibold text-white">Danger Zone</h2>
             <p className="text-sm text-slate-400">
               Deleting a job permanently removes it from the system.
@@ -730,6 +965,22 @@ export default function JobDetail() {
       </div>
     </div>
   );
+}
+
+function pdfFooter(doc, pageWidth, pageHeight, jobNumber) {
+  const pages = doc.getNumberOfPages();
+
+  for (let i = 1; i <= pages; i += 1) {
+    doc.setPage(i);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(120, 120, 120);
+    doc.text(
+      `The Nerd Herd Workshop Hub • ${jobNumber} • Page ${i} of ${pages}`,
+      12,
+      pageHeight - 8
+    );
+  }
 }
 
 function Field({ label, children }) {

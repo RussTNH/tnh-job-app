@@ -60,11 +60,27 @@ export default function Layout({ session, profile, profileLoading }) {
             New Job
           </Link>
 
+          <Link
+            to="/suppliers"
+            className={navClass("/suppliers")}
+            onClick={closeMobileMenu}
+          >
+            Suppliers
+          </Link>
+
           {isAdmin ? (
             <>
               <div className="pt-6 text-xs uppercase tracking-[0.25em] text-slate-500">
                 Admin
               </div>
+
+              <Link
+                to="/admin/suppliers"
+                className={navClass("/admin/suppliers")}
+                onClick={closeMobileMenu}
+              >
+                Supplier Admin
+              </Link>
 
               <Link
                 to="/admin/users"

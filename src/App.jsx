@@ -11,6 +11,8 @@ import Dashboard from "./pages/Dashboard";
 import Jobs from "./pages/Jobs";
 import CreateJob from "./pages/CreateJob";
 import JobDetail from "./pages/JobDetail";
+import Suppliers from "./pages/Suppliers";
+import AdminSuppliers from "./pages/AdminSuppliers";
 import AdminUsers from "./pages/AdminUsers";
 import AdminSettings from "./pages/AdminSettings";
 import AuditLog from "./pages/AuditLog";
@@ -139,6 +141,16 @@ export default function App() {
           <Route path="jobs" element={<Jobs />} />
           <Route path="jobs/new" element={<CreateJob />} />
           <Route path="jobs/:id" element={<JobDetail />} />
+          <Route path="suppliers" element={<Suppliers />} />
+
+          <Route
+            path="admin/suppliers"
+            element={
+              <AdminRoute profile={profile} profileLoading={profileLoading}>
+                <AdminSuppliers />
+              </AdminRoute>
+            }
+          />
 
           <Route
             path="admin/users"

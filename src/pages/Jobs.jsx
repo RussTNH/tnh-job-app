@@ -182,6 +182,24 @@ export default function Jobs() {
     setUsers(data || []);
   }
 
+  function handlePrintJob(jobId) {
+    const printWindow = window.open(`/jobs/${jobId}`, "_blank");
+
+    if (!printWindow) {
+      alert("Pop-up blocked. Please allow pop-ups and try again.");
+      return;
+    }
+
+    setTimeout(() => {
+      try {
+        printWindow.focus();
+        printWindow.print();
+      } catch (err) {
+        console.error("Print launch error:", err);
+      }
+    }, 1500);
+  }
+
   const filteredJobs = useMemo(() => {
     const term = search.trim().toLowerCase();
 
@@ -495,7 +513,7 @@ export default function Jobs() {
           <div className="p-6 text-slate-400">No jobs matched your filters.</div>
         ) : (
           <>
-            <div className="hidden md:block overflow-x-auto">
+            <div className="hidden overflow-x-auto md:block">
               <table className="min-w-full text-left">
                 <thead className="bg-slate-950 text-sm text-slate-400">
                   <tr>
@@ -506,6 +524,7 @@ export default function Jobs() {
                     <th className="px-6 py-4 font-medium">Dates</th>
                     <th className="px-6 py-4 font-medium">Financial</th>
                     <th className="px-6 py-4 font-medium">Flags</th>
+                    <th className="px-6 py-4 font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -585,6 +604,32 @@ export default function Jobs() {
                             )}
                           </div>
                         </td>
+
+                        <td className="px-6 py-4 align-top">
+                          <div className="flex flex-col gap-2">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/jobs/${job.id}`);
+                              }}
+                              className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white hover:bg-slate-800"
+                            >
+                              Open
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handlePrintJob(job.id);
+                              }}
+                              className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white hover:bg-slate-800"
+                            >
+                              Print
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                     );
                   })}
@@ -597,64 +642,68 @@ export default function Jobs() {
                 const age = daysSince(job.created_at);
 
                 return (
-                  <button
+                  <div
                     key={job.id}
-                    type="button"
-                    onClick={() => navigate(`/jobs/${job.id}`)}
-                    className="w-full rounded-2xl border border-slate-800 bg-slate-950 p-4 text-left hover:bg-slate-800"
+                    className="w-full rounded-2xl border border-slate-800 bg-slate-950 p-4"
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="text-sm text-blue-400">
-                          {job.job_number || "—"}
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/jobs/${job.id}`)}
+                      className="w-full text-left"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm text-blue-400">
+                            {job.job_number || "—"}
+                          </div>
+                          <div className="mt-1 font-medium text-white">
+                            {job.customer || "No customer"}
+                          </div>
+                          <div className="mt-1 text-sm text-slate-400">
+                            {job.device || "No device"}
+                            {job.model ? ` • ${job.model}` : ""}
+                          </div>
                         </div>
-                        <div className="mt-1 font-medium text-white">
-                          {job.customer || "No customer"}
-                        </div>
-                        <div className="mt-1 text-sm text-slate-400">
-                          {job.device || "No device"}
-                          {job.model ? ` • ${job.model}` : ""}
+
+                        <div className="shrink-0">
+                          <StatusBadge status={job.status} />
                         </div>
                       </div>
 
-                      <div className="shrink-0">
-                        <StatusBadge status={job.status} />
-                      </div>
-                    </div>
-
-                    <div className="mt-3 grid gap-2 text-sm text-slate-300">
-                      <div>
-                        <span className="text-slate-500">Assigned:</span>{" "}
-                        {job.assigned_to_name || "Unassigned"}
-                      </div>
-
-                      <div>
-                        <span className="text-slate-500">Service:</span>{" "}
-                        {job.service_type || "—"}
-                      </div>
-
-                      <div>
-                        <span className="text-slate-500">Price:</span>{" "}
-                        {money(job.price)}
-                      </div>
-
-                      <div>
-                        <span className="text-slate-500">Created:</span>{" "}
-                        {formatDate(job.created_at)}
-                      </div>
-
-                      <div>
-                        <span className="text-slate-500">Updated:</span>{" "}
-                        {formatDateTime(job.updated_at || job.created_at)}
-                      </div>
-
-                      {age !== null && job.status !== "Completed" ? (
+                      <div className="mt-3 grid gap-2 text-sm text-slate-300">
                         <div>
-                          <span className="text-slate-500">Open for:</span>{" "}
-                          {age} day{age === 1 ? "" : "s"}
+                          <span className="text-slate-500">Assigned:</span>{" "}
+                          {job.assigned_to_name || "Unassigned"}
                         </div>
-                      ) : null}
-                    </div>
+
+                        <div>
+                          <span className="text-slate-500">Service:</span>{" "}
+                          {job.service_type || "—"}
+                        </div>
+
+                        <div>
+                          <span className="text-slate-500">Price:</span>{" "}
+                          {money(job.price)}
+                        </div>
+
+                        <div>
+                          <span className="text-slate-500">Created:</span>{" "}
+                          {formatDate(job.created_at)}
+                        </div>
+
+                        <div>
+                          <span className="text-slate-500">Updated:</span>{" "}
+                          {formatDateTime(job.updated_at || job.created_at)}
+                        </div>
+
+                        {age !== null && job.status !== "Completed" ? (
+                          <div>
+                            <span className="text-slate-500">Open for:</span>{" "}
+                            {age} day{age === 1 ? "" : "s"}
+                          </div>
+                        ) : null}
+                      </div>
+                    </button>
 
                     <div className="mt-3 flex flex-wrap gap-2">
                       {job.donated ? (
@@ -671,7 +720,25 @@ export default function Jobs() {
                         <FlagBadge tone="rose">Not Collected</FlagBadge>
                       )}
                     </div>
-                  </button>
+
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/jobs/${job.id}`)}
+                        className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-white hover:bg-slate-800"
+                      >
+                        Open
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handlePrintJob(job.id)}
+                        className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-white hover:bg-slate-800"
+                      >
+                        Print
+                      </button>
+                    </div>
+                  </div>
                 );
               })}
             </div>
