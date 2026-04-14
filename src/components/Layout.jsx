@@ -1,7 +1,11 @@
-import { Outlet, Link, useLocation } from "react-router-dom";
+import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
+import { supabase } from "../lib/supabase";
 
-export default function Layout() {
+export default function Layout({ session, profile }) {
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const isAdmin = profile?.role === "admin";
 
   const isActive = (path) =>
     location.pathname === path ||
@@ -15,10 +19,15 @@ export default function Layout() {
         : "text-slate-300 hover:bg-slate-800 hover:text-white",
     ].join(" ");
 
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    navigate("/login");
+  }
+
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       <div className="flex min-h-screen">
-        <aside className="w-72 border-r border-slate-800 bg-slate-950/95 p-6">
+        <aside className="w-72 border-r border-slate-800 bg-slate-950/95 p-6 flex flex-col">
           <div className="mb-8">
             <div className="text-xs uppercase tracking-[0.3em] text-slate-400">
               The Nerd Herd
@@ -40,38 +49,60 @@ export default function Layout() {
               New Job
             </Link>
 
-            <div className="pt-6 text-xs uppercase tracking-[0.25em] text-slate-500">
-              Admin
-            </div>
+            {isAdmin ? (
+              <>
+                <div className="pt-6 text-xs uppercase tracking-[0.25em] text-slate-500">
+                  Admin
+                </div>
 
-            <Link to="/admin/users" className={navClass("/admin/users")}>
-              Users
-            </Link>
-            <Link to="/admin/settings" className={navClass("/admin/settings")}>
-              Settings
-            </Link>
+                <Link to="/admin/users" className={navClass("/admin/users")}>
+                  Users
+                </Link>
+                <Link to="/admin/settings" className={navClass("/admin/settings")}>
+                  Settings
+                </Link>
+              </>
+            ) : null}
           </nav>
 
           <div className="mt-10 rounded-3xl border border-slate-800 bg-slate-900 p-5 shadow-2xl">
-            <div className="text-sm font-semibold text-white">Workshop Services</div>
-            <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-slate-300">
-              <div className="rounded-2xl border border-slate-800 bg-slate-950 p-3">
-                Virus Removal
-              </div>
-              <div className="rounded-2xl border border-slate-800 bg-slate-950 p-3">
-                Data Recovery
-              </div>
-              <div className="rounded-2xl border border-slate-800 bg-slate-950 p-3">
-                Hardware Repair
-              </div>
-              <div className="rounded-2xl border border-slate-800 bg-slate-950 p-3">
-                Networking
-              </div>
+            <div className="text-sm font-semibold text-white">Signed In</div>
+            <div className="mt-2 text-sm text-slate-400 break-all">
+              {session?.user?.email || "Unknown user"}
             </div>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              <span
+                className={`inline-flex rounded-full border px-3 py-1 text-xs ${
+                  isAdmin
+                    ? "border-violet-500/30 bg-violet-500/15 text-violet-200"
+                    : "border-slate-600 bg-slate-700/40 text-slate-200"
+                }`}
+              >
+                {profile?.role || "staff"}
+              </span>
+
+              <span
+                className={`inline-flex rounded-full border px-3 py-1 text-xs ${
+                  profile?.is_active
+                    ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-200"
+                    : "border-rose-500/30 bg-rose-500/15 text-rose-200"
+                }`}
+              >
+                {profile?.is_active ? "Active" : "Inactive"}
+              </span>
+            </div>
+
+            <button
+              onClick={handleLogout}
+              className="mt-4 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white hover:bg-slate-800"
+            >
+              Log Out
+            </button>
           </div>
 
           <div className="mt-auto pt-8 text-xs text-slate-500">
-            TNH Job App · v1.0
+            TNH Job App · v2
           </div>
         </aside>
 
@@ -88,12 +119,8 @@ export default function Layout() {
                   </div>
                 </div>
 
-                <div className="w-full md:w-80">
-                  <input
-                    type="text"
-                    placeholder="Search jobs, customer, device..."
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-blue-500"
-                  />
+                <div className="text-sm text-slate-400">
+                  {isAdmin ? "Admin access enabled" : "Standard user access"}
                 </div>
               </div>
             </div>

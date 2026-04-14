@@ -1,6 +1,12 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Layout from "./components/Layout";
+import { useEffect, useState } from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { supabase } from "./lib/supabase";
 
+import Layout from "./components/Layout";
+import ProtectedRoute from "./components/ProtectedRoute";
+import AdminRoute from "./components/AdminRoute";
+
+import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Jobs from "./pages/Jobs";
 import CreateJob from "./pages/CreateJob";
@@ -9,16 +15,147 @@ import AdminUsers from "./pages/AdminUsers";
 import AdminSettings from "./pages/AdminSettings";
 
 export default function App() {
+  const [session, setSession] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [appLoading, setAppLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(false);
+
+  async function loadProfile(userId) {
+    if (!userId) {
+      setProfile(null);
+      return;
+    }
+
+    setProfileLoading(true);
+
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Error loading profile:", error);
+        setProfile(null);
+        return;
+      }
+
+      setProfile(data || null);
+    } catch (err) {
+      console.error("Unexpected profile load error:", err);
+      setProfile(null);
+    } finally {
+      setProfileLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function initialise() {
+      try {
+        const {
+          data: { session: currentSession },
+        } = await supabase.auth.getSession();
+
+        if (!isMounted) return;
+
+        setSession(currentSession ?? null);
+
+        if (currentSession?.user?.id) {
+          await loadProfile(currentSession.user.id);
+        } else {
+          setProfile(null);
+        }
+      } catch (err) {
+        console.error("Initial session load error:", err);
+        if (isMounted) {
+          setSession(null);
+          setProfile(null);
+        }
+      } finally {
+        if (isMounted) {
+          setAppLoading(false);
+        }
+      }
+    }
+
+    initialise();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      setSession(newSession ?? null);
+
+      if (newSession?.user?.id) {
+        loadProfile(newSession.user.id);
+      } else {
+        setProfile(null);
+        setProfileLoading(false);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  if (appLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
+        Loading...
+      </div>
+    );
+  }
+
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Layout />}>
+        <Route
+          path="/login"
+          element={session ? <Navigate to="/" replace /> : <Login />}
+        />
+
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute
+  session={session}
+  profile={profile}
+  profileLoading={profileLoading}
+>
+              <Layout
+                session={session}
+                profile={profile}
+                profileLoading={profileLoading}
+              />
+            </ProtectedRoute>
+          }
+        >
           <Route index element={<Dashboard />} />
           <Route path="jobs" element={<Jobs />} />
           <Route path="jobs/:id" element={<JobDetail />} />
           <Route path="create" element={<CreateJob />} />
-          <Route path="admin/users" element={<AdminUsers />} />
-          <Route path="admin/settings" element={<AdminSettings />} />
+
+          <Route
+            path="admin/users"
+            element={
+              <AdminRoute profile={profile} profileLoading={profileLoading}>
+                <AdminUsers />
+              </AdminRoute>
+            }
+          />
+
+          <Route
+            path="admin/settings"
+            element={
+              <AdminRoute profile={profile} profileLoading={profileLoading}>
+                <AdminSettings />
+              </AdminRoute>
+            }
+          />
         </Route>
       </Routes>
     </BrowserRouter>

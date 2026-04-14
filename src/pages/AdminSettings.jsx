@@ -1,34 +1,47 @@
 import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabase";
 
 const defaultSettings = {
-  workshopName: "The Nerd Herd",
-  contactPhone: "",
-  contactEmail: "",
+  id: 1,
+  workshop_name: "The Nerd Herd",
+  contact_phone: "",
+  contact_email: "",
   address: "",
-  defaultLabourRate: "",
-  printFooterText: "Generated from TNH Workshop Hub",
-  jobSheetNotes: "",
-  enableQrOnLiveJobs: true,
-  enablePrintedSignatureLines: true,
-  highlightDonatedItems: true,
+  default_labour_rate: "",
+  print_footer_text: "Generated from TNH Workshop Hub",
+  job_sheet_notes: "",
+  enable_qr_on_live_jobs: true,
+  enable_printed_signature_lines: true,
+  highlight_donated_items: true,
 };
-
-const STORAGE_KEY = "tnh_admin_settings";
 
 export default function AdminSettings() {
   const [settings, setSettings] = useState(defaultSettings);
   const [savedMessage, setSavedMessage] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        setSettings({ ...defaultSettings, ...JSON.parse(stored) });
-      }
-    } catch (error) {
-      console.error("Error loading settings:", error);
-    }
+    loadSettings();
   }, []);
+
+  async function loadSettings() {
+    setLoading(true);
+
+    const { data, error } = await supabase
+      .from("app_settings")
+      .select("*")
+      .eq("id", 1)
+      .single();
+
+    if (error) {
+      console.error("Error loading settings:", error);
+      setLoading(false);
+      return;
+    }
+
+    setSettings({ ...defaultSettings, ...data });
+    setLoading(false);
+  }
 
   function handleChange(e) {
     const { name, value, type, checked } = e.target;
@@ -39,18 +52,139 @@ export default function AdminSettings() {
     }));
   }
 
-  function handleSave(e) {
+  async function handleSave(e) {
     e.preventDefault();
 
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-      setSavedMessage("Settings saved locally");
-      setTimeout(() => setSavedMessage(""), 2500);
-    } catch (error) {
+    const payload = {
+      ...settings,
+      default_labour_rate:
+        settings.default_labour_rate === ""
+          ? null
+          : Number(settings.default_labour_rate),
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase.from("app_settings").upsert(payload);
+
+    if (error) {
       console.error("Error saving settings:", error);
       setSavedMessage("Could not save settings");
       setTimeout(() => setSavedMessage(""), 2500);
+      return;
     }
+
+    setSavedMessage("Settings saved");
+    setTimeout(() => setSavedMessage(""), 2500);
+  }
+
+  async function exportJobsJson() {
+    const { data, error } = await supabase
+      .from("jobs")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      alert(`Could not export jobs: ${error.message}`);
+      return;
+    }
+
+    const blob = new Blob([JSON.stringify(data || [], null, 2)], {
+      type: "application/json",
+    });
+    downloadBlob(blob, "tnh-jobs-backup.json");
+  }
+
+  async function exportJobsCsv() {
+    const { data, error } = await supabase
+      .from("jobs")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      alert(`Could not export jobs: ${error.message}`);
+      return;
+    }
+
+    const rows = data || [];
+    if (!rows.length) {
+      alert("No jobs to export");
+      return;
+    }
+
+    const headers = [
+      "job_number",
+      "customer",
+      "contact",
+      "device",
+      "model",
+      "serial_number",
+      "asset_tag",
+      "service_type",
+      "status",
+      "donated",
+      "paid",
+      "collected",
+      "parts_cost",
+      "labour_cost",
+      "price",
+      "issue",
+      "parts_used",
+      "notes",
+      "created_at",
+    ];
+
+    const csv = [
+      headers.join(","),
+      ...rows.map((row) =>
+        headers
+          .map((header) => `"${String(row[header] ?? "").replace(/"/g, '""')}"`)
+          .join(",")
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    downloadBlob(blob, "tnh-jobs-backup.csv");
+  }
+
+  async function exportUsersJson() {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      alert(`Could not export users: ${error.message}`);
+      return;
+    }
+
+    const blob = new Blob([JSON.stringify(data || [], null, 2)], {
+      type: "application/json",
+    });
+    downloadBlob(blob, "tnh-users-backup.json");
+  }
+
+  function exportSettingsJson() {
+    const blob = new Blob([JSON.stringify(settings, null, 2)], {
+      type: "application/json",
+    });
+    downloadBlob(blob, "tnh-settings-backup.json");
+  }
+
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  if (loading) {
+    return (
+      <div className="rounded-3xl border border-slate-800 bg-slate-900 p-8 text-slate-300">
+        Loading settings...
+      </div>
+    );
   }
 
   return (
@@ -61,8 +195,7 @@ export default function AdminSettings() {
         </div>
         <h1 className="mt-2 text-3xl font-bold text-white">Settings</h1>
         <p className="mt-2 max-w-2xl text-slate-400">
-          Configure your workshop details, print defaults, and future system
-          behaviour. These settings are currently stored locally in this browser.
+          Configure workshop details, print defaults, and create backup exports.
         </p>
       </div>
 
@@ -77,44 +210,40 @@ export default function AdminSettings() {
               <div className="grid gap-5 md:grid-cols-2">
                 <Field label="Workshop Name">
                   <input
-                    name="workshopName"
-                    value={settings.workshopName}
+                    name="workshop_name"
+                    value={settings.workshop_name}
                     onChange={handleChange}
-                    placeholder="Workshop or organisation name"
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-blue-500"
+                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
                   />
                 </Field>
 
                 <Field label="Contact Phone">
                   <input
-                    name="contactPhone"
-                    value={settings.contactPhone}
+                    name="contact_phone"
+                    value={settings.contact_phone}
                     onChange={handleChange}
-                    placeholder="Phone number"
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-blue-500"
+                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
                   />
                 </Field>
 
                 <Field label="Contact Email">
                   <input
-                    name="contactEmail"
-                    value={settings.contactEmail}
+                    name="contact_email"
+                    value={settings.contact_email}
                     onChange={handleChange}
-                    placeholder="Email address"
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-blue-500"
+                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
                   />
                 </Field>
 
                 <Field label="Default Labour Rate (£)">
                   <input
-                    name="defaultLabourRate"
+                    name="default_labour_rate"
                     type="number"
                     step="0.01"
                     min="0"
-                    value={settings.defaultLabourRate}
+                    value={settings.default_labour_rate ?? ""}
                     onChange={handleChange}
-                    placeholder="0.00"
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-blue-500"
+                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
                   />
                 </Field>
               </div>
@@ -126,8 +255,7 @@ export default function AdminSettings() {
                     value={settings.address}
                     onChange={handleChange}
                     rows="4"
-                    placeholder="Workshop address"
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-blue-500"
+                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
                   />
                 </Field>
               </div>
@@ -141,22 +269,20 @@ export default function AdminSettings() {
               <div className="space-y-5">
                 <Field label="Print Footer Text">
                   <input
-                    name="printFooterText"
-                    value={settings.printFooterText}
+                    name="print_footer_text"
+                    value={settings.print_footer_text}
                     onChange={handleChange}
-                    placeholder="Footer text for printed job sheets"
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-blue-500"
+                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
                   />
                 </Field>
 
                 <Field label="Default Job Sheet Notes">
                   <textarea
-                    name="jobSheetNotes"
-                    value={settings.jobSheetNotes}
+                    name="job_sheet_notes"
+                    value={settings.job_sheet_notes}
                     onChange={handleChange}
                     rows="4"
-                    placeholder="Optional notes or disclaimers to appear on job sheets later"
-                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-blue-500"
+                    className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
                   />
                 </Field>
               </div>
@@ -170,22 +296,20 @@ export default function AdminSettings() {
               <div className="space-y-4">
                 <ToggleRow
                   label="Enable QR on live job pages"
-                  name="enableQrOnLiveJobs"
-                  checked={settings.enableQrOnLiveJobs}
+                  name="enable_qr_on_live_jobs"
+                  checked={settings.enable_qr_on_live_jobs}
                   onChange={handleChange}
                 />
-
                 <ToggleRow
                   label="Enable signature lines on printed sheets"
-                  name="enablePrintedSignatureLines"
-                  checked={settings.enablePrintedSignatureLines}
+                  name="enable_printed_signature_lines"
+                  checked={settings.enable_printed_signature_lines}
                   onChange={handleChange}
                 />
-
                 <ToggleRow
-                  label="Highlight donated items in lists"
-                  name="highlightDonatedItems"
-                  checked={settings.highlightDonatedItems}
+                  label="Highlight donated items"
+                  name="highlight_donated_items"
+                  checked={settings.highlight_donated_items}
                   onChange={handleChange}
                 />
               </div>
@@ -194,44 +318,41 @@ export default function AdminSettings() {
 
           <div className="space-y-6">
             <section className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
-              <h2 className="text-xl font-semibold text-white">Preview</h2>
-              <p className="mt-2 text-sm text-slate-400">
-                A quick summary of your current settings.
-              </p>
-
-              <div className="mt-5 space-y-4">
-                <SummaryRow label="Workshop" value={settings.workshopName || "Not set"} />
-                <SummaryRow label="Phone" value={settings.contactPhone || "Not set"} />
-                <SummaryRow label="Email" value={settings.contactEmail || "Not set"} />
-                <SummaryRow
-                  label="Labour Rate"
-                  value={
-                    settings.defaultLabourRate
-                      ? `£${Number(settings.defaultLabourRate).toFixed(2)}`
-                      : "Not set"
-                  }
-                />
-                <SummaryRow
-                  label="QR on Live Jobs"
-                  value={settings.enableQrOnLiveJobs ? "Enabled" : "Disabled"}
-                />
-                <SummaryRow
-                  label="Signature Lines"
-                  value={settings.enablePrintedSignatureLines ? "Enabled" : "Disabled"}
-                />
-                <SummaryRow
-                  label="Highlight Donations"
-                  value={settings.highlightDonatedItems ? "Enabled" : "Disabled"}
-                />
+              <h2 className="text-xl font-semibold text-white">Backup / Export</h2>
+              <div className="mt-5 grid gap-3">
+                <button
+                  type="button"
+                  onClick={exportJobsJson}
+                  className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white hover:bg-slate-800"
+                >
+                  Export Jobs JSON
+                </button>
+                <button
+                  type="button"
+                  onClick={exportJobsCsv}
+                  className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white hover:bg-slate-800"
+                >
+                  Export Jobs CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={exportUsersJson}
+                  className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white hover:bg-slate-800"
+                >
+                  Export Users JSON
+                </button>
+                <button
+                  type="button"
+                  onClick={exportSettingsJson}
+                  className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white hover:bg-slate-800"
+                >
+                  Export Settings JSON
+                </button>
               </div>
             </section>
 
             <section className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
               <h2 className="text-xl font-semibold text-white">Save Settings</h2>
-              <p className="mt-2 text-sm text-slate-400">
-                This first version stores settings in your current browser only.
-              </p>
-
               <button
                 type="submit"
                 className="mt-5 w-full rounded-2xl bg-gradient-to-r from-blue-600 to-violet-600 px-4 py-3 font-medium text-white shadow-lg hover:opacity-90"
@@ -242,14 +363,6 @@ export default function AdminSettings() {
               <div className="mt-4 text-sm text-slate-300">
                 {savedMessage || "No recent changes saved."}
               </div>
-            </section>
-
-            <section className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
-              <h2 className="text-xl font-semibold text-white">Next Step</h2>
-              <p className="mt-2 text-sm text-slate-400">
-                Once you’re happy with the layout, we can connect these settings
-                to Supabase so they load for all users and devices.
-              </p>
             </section>
           </div>
         </div>
@@ -279,16 +392,5 @@ function ToggleRow({ label, name, checked, onChange }) {
         className="h-5 w-5"
       />
     </label>
-  );
-}
-
-function SummaryRow({ label, value }) {
-  return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4">
-      <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
-        {label}
-      </div>
-      <div className="mt-2 text-sm font-medium text-white">{value}</div>
-    </div>
   );
 }
