@@ -1,53 +1,164 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 
-const statusOptions = [
-  "All",
-  "Open",
-  "In Progress",
-  "Waiting Parts",
-  "Ready for Collection",
-  "Completed",
-];
+const PAGE_SIZE = 12;
 
-const paymentOptions = ["All", "Paid", "Unpaid", "Donated"];
+function money(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  const num = Number(value);
+  if (Number.isNaN(num)) return "—";
+  return `£${num.toFixed(2)}`;
+}
 
-const serviceOptions = [
-  "All",
-  "Virus Removal",
-  "Data Recovery",
-  "Hardware Repair",
-  "Networking",
-  "Software Support",
-  "General Drop-in",
-  "Donated Item",
-];
+function formatDate(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function formatDateTime(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function daysSince(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const diffMs = Date.now() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  return diffDays;
+}
+
+function StatusBadge({ status }) {
+  const map = {
+    Open: "bg-slate-700 text-slate-100",
+    "In Progress": "bg-blue-600/20 text-blue-300",
+    "Waiting Parts": "bg-amber-500/20 text-amber-300",
+    "Ready for Collection": "bg-emerald-500/20 text-emerald-300",
+    Completed: "bg-violet-500/20 text-violet-300",
+  };
+
+  return (
+    <span
+      className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${
+        map[status] || "bg-slate-700 text-slate-100"
+      }`}
+    >
+      {status || "—"}
+    </span>
+  );
+}
+
+function FlagBadge({ children, tone = "slate" }) {
+  const tones = {
+    slate: "bg-slate-700/40 text-slate-200",
+    green: "bg-emerald-500/20 text-emerald-300",
+    amber: "bg-amber-500/20 text-amber-300",
+    rose: "bg-rose-500/20 text-rose-300",
+    blue: "bg-blue-500/20 text-blue-300",
+    violet: "bg-violet-500/20 text-violet-300",
+  };
+
+  return (
+    <span
+      className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${
+        tones[tone] || tones.slate
+      }`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function StatCard({ label, value, onClick, active = false }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-3xl border p-5 text-left shadow-xl transition ${
+        active
+          ? "border-blue-500 bg-slate-800"
+          : "border-slate-800 bg-slate-900 hover:bg-slate-800/60"
+      }`}
+    >
+      <div className="text-sm text-slate-400">{label}</div>
+      <div className="mt-2 text-2xl font-bold text-white">{value}</div>
+    </button>
+  );
+}
 
 export default function Jobs() {
-  const [jobs, setJobs] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
-  const [searchTerm, setSearchTerm] = useState("");
+  const [jobs, setJobs] = useState([]);
+  const [users, setUsers] = useState([]);
+
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+
+  const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [assignedFilter, setAssignedFilter] = useState("All");
   const [paymentFilter, setPaymentFilter] = useState("All");
-  const [serviceFilter, setServiceFilter] = useState("All");
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
-    fetchJobs();
+    loadJobs();
+    loadUsers();
   }, []);
 
-  async function fetchJobs() {
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, assignedFilter, paymentFilter]);
+
+  async function loadJobs() {
     setLoading(true);
+    setLoadError("");
 
     const { data, error } = await supabase
       .from("jobs")
-      .select("*")
+      .select(`
+        id,
+        job_number,
+        customer,
+        contact,
+        device,
+        model,
+        service_type,
+        status,
+        assigned_to,
+        assigned_to_name,
+        price,
+        labour_cost,
+        parts_cost,
+        paid,
+        donated,
+        collected,
+        created_at,
+        updated_at
+      `)
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("Error fetching jobs:", error);
-      alert(`Error loading jobs: ${error.message}`);
+      console.error("Error loading jobs:", error);
+      setLoadError(error.message || "Unknown error");
+      setJobs([]);
       setLoading(false);
       return;
     }
@@ -56,370 +167,559 @@ export default function Jobs() {
     setLoading(false);
   }
 
-  function isDonated(job) {
-    return Boolean(job.donated) || job.service_type === "Donated Item";
-  }
+  async function loadUsers() {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, full_name, email, is_active")
+      .eq("is_active", true)
+      .order("full_name", { ascending: true });
 
-  function formatPrice(value, donated = false) {
-    if (donated) return "£0.00";
-    if (value === null || value === undefined || value === "") return "£0.00";
-    return `£${Number(value).toFixed(2)}`;
-  }
-
-  function formatDate(value) {
-    if (!value) return "—";
-    return new Date(value).toLocaleString();
-  }
-
-  function statusBadgeClass(status) {
-    const map = {
-      Open: "bg-blue-500/15 text-blue-300 border-blue-500/30",
-      "In Progress": "bg-amber-500/15 text-amber-300 border-amber-500/30",
-      "Waiting Parts": "bg-orange-500/15 text-orange-300 border-orange-500/30",
-      "Ready for Collection": "bg-cyan-500/15 text-cyan-300 border-cyan-500/30",
-      Completed: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
-    };
-
-    return map[status] || "bg-slate-700/40 text-slate-200 border-slate-600";
-  }
-
-  function paymentBadgeClass(job) {
-    if (isDonated(job)) {
-      return "bg-fuchsia-500/15 text-fuchsia-200 border-fuchsia-500/30";
+    if (error) {
+      console.error("Error loading users:", error);
+      return;
     }
 
-    return job.paid
-      ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
-      : "bg-rose-500/15 text-rose-300 border-rose-500/30";
-  }
-
-  function paymentBadgeText(job) {
-    if (isDonated(job)) return "Donated";
-    return job.paid ? "Paid" : "Unpaid";
-  }
-
-  function collectedBadgeClass(collected) {
-    return collected
-      ? "bg-cyan-500/15 text-cyan-200 border-cyan-500/30"
-      : "bg-slate-700/40 text-slate-200 border-slate-600";
-  }
-
-  function collectedBadgeText(collected) {
-    return collected ? "Collected" : "Not Collected";
-  }
-
-  function serviceBadgeClass(serviceType) {
-    if (serviceType === "Donated Item") {
-      return "bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30";
-    }
-
-    return "bg-slate-700/40 text-slate-200 border-slate-600";
-  }
-
-  function cardClass(job) {
-    if (isDonated(job)) {
-      return [
-        "group rounded-3xl border p-5 shadow-xl transition-all",
-        "border-fuchsia-500/30 bg-gradient-to-br from-slate-900 via-slate-900 to-fuchsia-950/40",
-        "hover:border-fuchsia-400 hover:shadow-fuchsia-900/20",
-      ].join(" ");
-    }
-
-    return [
-      "group rounded-3xl border border-slate-800 bg-slate-900 p-5 shadow-xl transition-all",
-      "hover:border-blue-500 hover:shadow-blue-900/20",
-    ].join(" ");
+    setUsers(data || []);
   }
 
   const filteredJobs = useMemo(() => {
+    const term = search.trim().toLowerCase();
+
     return jobs.filter((job) => {
-      const search = searchTerm.trim().toLowerCase();
-
-      const searchableText = [
-        job.job_number,
-        job.customer,
-        job.contact,
-        job.device,
-        job.model,
-        job.serial_number,
-        job.asset_tag,
-        job.issue,
-        job.service_type,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      const matchesSearch = !search || searchableText.includes(search);
+      const matchesSearch =
+        !term ||
+        (job.job_number || "").toLowerCase().includes(term) ||
+        (job.customer || "").toLowerCase().includes(term) ||
+        (job.contact || "").toLowerCase().includes(term) ||
+        (job.device || "").toLowerCase().includes(term) ||
+        (job.model || "").toLowerCase().includes(term) ||
+        (job.assigned_to_name || "").toLowerCase().includes(term);
 
       const matchesStatus =
-        statusFilter === "All" || (job.status || "Open") === statusFilter;
+        statusFilter === "All" || job.status === statusFilter;
+
+      const matchesAssigned =
+        assignedFilter === "All" ||
+        (assignedFilter === "Unassigned" && !job.assigned_to) ||
+        job.assigned_to === assignedFilter;
 
       const matchesPayment =
         paymentFilter === "All" ||
-        (paymentFilter === "Paid" && !isDonated(job) && Boolean(job.paid)) ||
-        (paymentFilter === "Unpaid" && !isDonated(job) && !Boolean(job.paid)) ||
-        (paymentFilter === "Donated" && isDonated(job));
+        (paymentFilter === "Paid" && job.paid && !job.donated) ||
+        (paymentFilter === "Unpaid" && !job.paid && !job.donated) ||
+        (paymentFilter === "Donated" && job.donated) ||
+        (paymentFilter === "Collected" && job.collected) ||
+        (paymentFilter === "Not Collected" && !job.collected);
 
-      const matchesService =
-        serviceFilter === "All" ||
-        (job.service_type || "Uncategorised") === serviceFilter;
-
-      return matchesSearch && matchesStatus && matchesPayment && matchesService;
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesAssigned &&
+        matchesPayment
+      );
     });
-  }, [jobs, searchTerm, statusFilter, paymentFilter, serviceFilter]);
+  }, [jobs, search, statusFilter, assignedFilter, paymentFilter]);
 
-  const stats = useMemo(() => {
+  const totals = useMemo(() => {
     return {
       total: jobs.length,
       open: jobs.filter((j) => j.status === "Open").length,
-      progress: jobs.filter((j) => j.status === "In Progress").length,
-      waiting: jobs.filter((j) => j.status === "Waiting Parts").length,
+      inProgress: jobs.filter((j) => j.status === "In Progress").length,
+      waitingParts: jobs.filter((j) => j.status === "Waiting Parts").length,
       ready: jobs.filter((j) => j.status === "Ready for Collection").length,
-      unpaid: jobs.filter((j) => !isDonated(j) && !j.paid).length,
-      donated: jobs.filter((j) => isDonated(j)).length,
-      collected: jobs.filter((j) => Boolean(j.collected)).length,
+      completed: jobs.filter((j) => j.status === "Completed").length,
     };
   }, [jobs]);
 
-  function clearFilters() {
-    setSearchTerm("");
-    setStatusFilter("All");
-    setPaymentFilter("All");
-    setServiceFilter("All");
+  const oldestActiveJobs = useMemo(() => {
+    return jobs
+      .filter(
+        (job) =>
+          job.status !== "Completed" &&
+          job.status !== "Ready for Collection"
+      )
+      .map((job) => ({
+        ...job,
+        ageDays: daysSince(job.created_at) ?? 0,
+      }))
+      .sort((a, b) => b.ageDays - a.ageDays)
+      .slice(0, 5);
+  }, [jobs]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredJobs.length / PAGE_SIZE));
+
+  const paginatedJobs = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredJobs.slice(start, start + PAGE_SIZE);
+  }, [filteredJobs, page]);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
+  function toggleStatusFilter(status) {
+    setStatusFilter((prev) => (prev === status ? "All" : status));
+  }
+
+  if (loading) {
+    return (
+      <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 text-slate-300">
+        Loading jobs...
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="rounded-3xl border border-rose-500/20 bg-slate-900 p-6 text-rose-200">
+        Could not load jobs: {loadError}
+      </div>
+    );
   }
 
   return (
     <div className="space-y-6">
       <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="text-sm uppercase tracking-[0.25em] text-blue-400">
-              Workshop Queue
+              Workshop
             </div>
             <h1 className="mt-2 text-3xl font-bold text-white">Jobs</h1>
-            <p className="mt-2 max-w-2xl text-slate-400">
-              Search, filter, and manage workshop, drop-in, and donated-item jobs.
+            <p className="mt-2 text-slate-400">
+              Search, filter, and manage all workshop jobs.
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-3">
-            <Link
-              to="/create"
-              className="rounded-2xl bg-gradient-to-r from-blue-600 to-violet-600 px-5 py-3 font-medium text-white shadow-lg hover:opacity-90"
-            >
-              + New Job
-            </Link>
-          </div>
+          <button
+            type="button"
+            onClick={() => navigate("/jobs/new")}
+            className="w-full rounded-2xl bg-gradient-to-r from-blue-600 to-violet-600 px-5 py-3 font-medium text-white shadow-lg hover:opacity-90 sm:w-auto"
+          >
+            + Create Job
+          </button>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-8">
-        <StatCard label="Total Jobs" value={stats.total} />
-        <StatCard label="Open" value={stats.open} />
-        <StatCard label="In Progress" value={stats.progress} />
-        <StatCard label="Waiting Parts" value={stats.waiting} />
-        <StatCard label="Ready to Collect" value={stats.ready} />
-        <StatCard label="Collected" value={stats.collected} />
-        <StatCard label="Unpaid" value={stats.unpaid} />
-        <StatCard label="Donated Items" value={stats.donated} highlight />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+        <StatCard
+          label="Total Jobs"
+          value={totals.total}
+          onClick={() => setStatusFilter("All")}
+          active={statusFilter === "All"}
+        />
+        <StatCard
+          label="Open"
+          value={totals.open}
+          onClick={() => toggleStatusFilter("Open")}
+          active={statusFilter === "Open"}
+        />
+        <StatCard
+          label="In Progress"
+          value={totals.inProgress}
+          onClick={() => toggleStatusFilter("In Progress")}
+          active={statusFilter === "In Progress"}
+        />
+        <StatCard
+          label="Waiting Parts"
+          value={totals.waitingParts}
+          onClick={() => toggleStatusFilter("Waiting Parts")}
+          active={statusFilter === "Waiting Parts"}
+        />
+        <StatCard
+          label="Ready"
+          value={totals.ready}
+          onClick={() => toggleStatusFilter("Ready for Collection")}
+          active={statusFilter === "Ready for Collection"}
+        />
+        <StatCard
+          label="Completed"
+          value={totals.completed}
+          onClick={() => toggleStatusFilter("Completed")}
+          active={statusFilter === "Completed"}
+        />
       </div>
 
       <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
-        <div className="grid gap-4 xl:grid-cols-4">
-          <div className="xl:col-span-2">
+        <div className="mb-4 flex flex-wrap gap-3">
+          {["Open", "In Progress", "Waiting Parts", "Ready for Collection", "Completed"].map(
+            (status) => (
+              <button
+                key={status}
+                type="button"
+                onClick={() => toggleStatusFilter(status)}
+                className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                  statusFilter === status
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-950 text-slate-300 hover:bg-slate-800"
+                }`}
+              >
+                {status}
+              </button>
+            )
+          )}
+
+          <button
+            type="button"
+            onClick={() => setStatusFilter("All")}
+            className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+              statusFilter === "All"
+                ? "bg-violet-600 text-white"
+                : "bg-slate-950 text-slate-300 hover:bg-slate-800"
+            }`}
+          >
+            Clear Status
+          </button>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="md:col-span-2">
             <label className="mb-2 block text-sm text-slate-400">Search</label>
             <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by job no, customer, device, model, serial, issue..."
-              className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-blue-500"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Job number, customer, device, model, assigned user..."
+              className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
             />
           </div>
 
           <div>
-            <label className="mb-2 block text-sm text-slate-400">Status</label>
+            <label className="mb-2 block text-sm text-slate-400">Assigned</label>
             <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-500"
+              value={assignedFilter}
+              onChange={(e) => setAssignedFilter(e.target.value)}
+              className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
             >
-              {statusOptions.map((option) => (
-                <option key={option}>{option}</option>
+              <option value="All">All</option>
+              <option value="Unassigned">Unassigned</option>
+              {users.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.full_name || user.email}
+                </option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="mb-2 block text-sm text-slate-400">Payment / Donation</label>
+            <label className="mb-2 block text-sm text-slate-400">Payment / Collection</label>
             <select
               value={paymentFilter}
               onChange={(e) => setPaymentFilter(e.target.value)}
-              className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-500"
+              className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
             >
-              {paymentOptions.map((option) => (
-                <option key={option}>{option}</option>
-              ))}
+              <option>All</option>
+              <option>Paid</option>
+              <option>Unpaid</option>
+              <option>Donated</option>
+              <option>Collected</option>
+              <option>Not Collected</option>
             </select>
           </div>
         </div>
 
-        <div className="mt-4 grid gap-4 xl:grid-cols-4">
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setSearch("");
+              setStatusFilter("All");
+              setAssignedFilter("All");
+              setPaymentFilter("All");
+            }}
+            className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white hover:bg-slate-800 sm:w-auto"
+          >
+            Clear All Filters
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
+        <div className="flex items-center justify-between">
           <div>
-            <label className="mb-2 block text-sm text-slate-400">Service Type</label>
-            <select
-              value={serviceFilter}
-              onChange={(e) => setServiceFilter(e.target.value)}
-              className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white outline-none focus:border-blue-500"
-            >
-              {serviceOptions.map((option) => (
-                <option key={option}>{option}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="xl:col-span-3 flex items-end">
-            <button
-              type="button"
-              onClick={clearFilters}
-              className="rounded-2xl border border-slate-700 bg-slate-950 px-5 py-3 font-medium text-white hover:bg-slate-800"
-            >
-              Clear Filters
-            </button>
+            <h2 className="text-xl font-semibold text-white">Oldest Active Jobs</h2>
+            <p className="mt-1 text-sm text-slate-400">
+              Jobs that have been open the longest and may need attention.
+            </p>
           </div>
         </div>
 
-        <div className="mt-4 text-sm text-slate-400">
-          Showing <span className="font-semibold text-white">{filteredJobs.length}</span> of{" "}
-          <span className="font-semibold text-white">{jobs.length}</span> jobs
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="rounded-3xl border border-slate-800 bg-slate-900 p-10 text-center text-slate-400">
-          Loading jobs...
-        </div>
-      ) : filteredJobs.length === 0 ? (
-        <div className="rounded-3xl border border-slate-800 bg-slate-900 p-10 text-center text-slate-400">
-          No jobs match your current filters.
-        </div>
-      ) : (
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {filteredJobs.map((job) => {
-            const donated = isDonated(job);
-
-            return (
-              <Link
+        {oldestActiveJobs.length === 0 ? (
+          <div className="mt-4 text-slate-400">No active jobs to show.</div>
+        ) : (
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+            {oldestActiveJobs.map((job) => (
+              <button
                 key={job.id}
-                to={`/jobs/${job.id}`}
-                className={cardClass(job)}
+                type="button"
+                onClick={() => navigate(`/jobs/${job.id}`)}
+                className="rounded-2xl border border-slate-800 bg-slate-950 p-4 text-left hover:bg-slate-800"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                      Job Number
-                    </div>
-                    <div className="mt-1 text-base font-semibold text-white">
-                      {job.job_number || "—"}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col items-end gap-2">
-                    <span
-                      className={`inline-flex rounded-full border px-3 py-1 text-xs ${statusBadgeClass(job.status)}`}
-                    >
-                      {job.status || "Open"}
-                    </span>
-
-                    <span
-                      className={`inline-flex rounded-full border px-3 py-1 text-xs ${paymentBadgeClass(job)}`}
-                    >
-                      {paymentBadgeText(job)}
-                    </span>
-
-                    <span
-                      className={`inline-flex rounded-full border px-3 py-1 text-xs ${collectedBadgeClass(job.collected)}`}
-                    >
-                      {collectedBadgeText(job.collected)}
-                    </span>
-                  </div>
+                <div className="text-sm text-blue-400">{job.job_number || "—"}</div>
+                <div className="mt-2 font-medium text-white">
+                  {job.customer || "No customer"}
                 </div>
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <span
-                    className={`inline-flex rounded-full border px-3 py-1 text-xs ${serviceBadgeClass(
-                      job.service_type
-                    )}`}
-                  >
-                    {job.service_type || "Uncategorised"}
-                  </span>
-
-                  {donated ? (
-                    <span className="inline-flex rounded-full border border-fuchsia-500/30 bg-fuchsia-500/15 px-3 py-1 text-xs text-fuchsia-200">
-                      Donated
-                    </span>
-                  ) : null}
+                <div className="mt-1 text-sm text-slate-400">
+                  {job.device || "No device"}
                 </div>
-
-                <div className="mt-5 grid gap-3">
-                  <InfoBlock label="Customer" value={job.customer || "—"} />
-                  <InfoBlock label="Device" value={job.device || "—"} />
-                  <InfoBlock label="Model" value={job.model || "—"} />
-                  <InfoBlock label="Serial No." value={job.serial_number || "—"} />
-                  <InfoBlock label="Type" value={job.service_type || job.Type || "—"} />
-                  <InfoBlock label="Price" value={formatPrice(job.price, donated)} />
-                </div>
-
-                <div className="mt-4">
-                  <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                    Issue
-                  </div>
-                  <div className="mt-1 line-clamp-3 text-sm text-slate-300">
-                    {job.issue || "No issue description"}
-                  </div>
-                </div>
-
-                <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
-                  <span>{formatDate(job.created_at)}</span>
-                  <span className={donated ? "text-fuchsia-300 group-hover:underline" : "text-blue-400 group-hover:underline"}>
-                    Open Job →
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <StatusBadge status={job.status} />
+                  <span className="text-xs text-amber-300">
+                    {job.ageDays} day{job.ageDays === 1 ? "" : "s"}
                   </span>
                 </div>
-              </Link>
-            );
-          })}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-3xl border border-slate-800 bg-slate-900 shadow-xl">
+        <div className="border-b border-slate-800 px-6 py-4">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+            <div className="text-sm text-slate-400">
+              Showing <span className="font-medium text-white">{paginatedJobs.length}</span> on
+              this page of <span className="font-medium text-white">{filteredJobs.length}</span>{" "}
+              filtered jobs
+            </div>
+
+            <div className="text-sm text-slate-400">
+              Page <span className="font-medium text-white">{page}</span> of{" "}
+              <span className="font-medium text-white">{totalPages}</span>
+            </div>
+          </div>
         </div>
-      )}
-    </div>
-  );
-}
 
-function StatCard({ label, value, highlight = false }) {
-  return (
-    <div
-      className={[
-        "rounded-3xl border p-5 shadow-xl",
-        highlight
-          ? "border-fuchsia-500/30 bg-gradient-to-br from-slate-900 to-fuchsia-950/30"
-          : "border-slate-800 bg-slate-900",
-      ].join(" ")}
-    >
-      <div className={`text-sm ${highlight ? "text-fuchsia-300" : "text-slate-400"}`}>
-        {label}
-      </div>
-      <div className="mt-2 text-3xl font-bold text-white">{value}</div>
-    </div>
-  );
-}
+        {filteredJobs.length === 0 ? (
+          <div className="p-6 text-slate-400">No jobs matched your filters.</div>
+        ) : (
+          <>
+            <div className="hidden md:block overflow-x-auto">
+              <table className="min-w-full text-left">
+                <thead className="bg-slate-950 text-sm text-slate-400">
+                  <tr>
+                    <th className="px-6 py-4 font-medium">Job</th>
+                    <th className="px-6 py-4 font-medium">Customer / Device</th>
+                    <th className="px-6 py-4 font-medium">Status</th>
+                    <th className="px-6 py-4 font-medium">Assigned</th>
+                    <th className="px-6 py-4 font-medium">Dates</th>
+                    <th className="px-6 py-4 font-medium">Financial</th>
+                    <th className="px-6 py-4 font-medium">Flags</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedJobs.map((job) => {
+                    const age = daysSince(job.created_at);
 
-function InfoBlock({ label, value }) {
-  return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-950 p-3">
-      <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
-        {label}
+                    return (
+                      <tr
+                        key={job.id}
+                        onClick={() => navigate(`/jobs/${job.id}`)}
+                        className="cursor-pointer border-t border-slate-800 hover:bg-slate-800/40"
+                      >
+                        <td className="px-6 py-4 align-top">
+                          <div className="font-medium text-white">{job.job_number || "—"}</div>
+                          <div className="mt-1 text-sm text-slate-400">
+                            {job.service_type || "—"}
+                          </div>
+                        </td>
+
+                        <td className="px-6 py-4 align-top">
+                          <div className="font-medium text-white">
+                            {job.customer || "No customer"}
+                          </div>
+                          <div className="mt-1 text-sm text-slate-400">
+                            {job.device || "No device"}
+                            {job.model ? ` • ${job.model}` : ""}
+                          </div>
+                        </td>
+
+                        <td className="px-6 py-4 align-top">
+                          <div className="space-y-2">
+                            <StatusBadge status={job.status} />
+                            {age !== null && job.status !== "Completed" ? (
+                              <div className="text-xs text-slate-500">
+                                Open for {age} day{age === 1 ? "" : "s"}
+                              </div>
+                            ) : null}
+                          </div>
+                        </td>
+
+                        <td className="px-6 py-4 align-top">
+                          <div className="text-white">
+                            {job.assigned_to_name || "Unassigned"}
+                          </div>
+                        </td>
+
+                        <td className="px-6 py-4 align-top">
+                          <div className="text-sm text-white">
+                            Created: {formatDate(job.created_at)}
+                          </div>
+                          <div className="mt-1 text-sm text-slate-400">
+                            Updated: {formatDateTime(job.updated_at || job.created_at)}
+                          </div>
+                        </td>
+
+                        <td className="px-6 py-4 align-top">
+                          <div className="text-white">{money(job.price)}</div>
+                          <div className="mt-1 text-sm text-slate-400">
+                            Labour: {money(job.labour_cost)} • Parts: {money(job.parts_cost)}
+                          </div>
+                        </td>
+
+                        <td className="px-6 py-4 align-top">
+                          <div className="flex flex-wrap gap-2">
+                            {job.donated ? (
+                              <FlagBadge tone="violet">Donated</FlagBadge>
+                            ) : job.paid ? (
+                              <FlagBadge tone="green">Paid</FlagBadge>
+                            ) : (
+                              <FlagBadge tone="amber">Unpaid</FlagBadge>
+                            )}
+
+                            {job.collected ? (
+                              <FlagBadge tone="blue">Collected</FlagBadge>
+                            ) : (
+                              <FlagBadge tone="rose">Not Collected</FlagBadge>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="space-y-4 p-4 md:hidden">
+              {paginatedJobs.map((job) => {
+                const age = daysSince(job.created_at);
+
+                return (
+                  <button
+                    key={job.id}
+                    type="button"
+                    onClick={() => navigate(`/jobs/${job.id}`)}
+                    className="w-full rounded-2xl border border-slate-800 bg-slate-950 p-4 text-left hover:bg-slate-800"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm text-blue-400">
+                          {job.job_number || "—"}
+                        </div>
+                        <div className="mt-1 font-medium text-white">
+                          {job.customer || "No customer"}
+                        </div>
+                        <div className="mt-1 text-sm text-slate-400">
+                          {job.device || "No device"}
+                          {job.model ? ` • ${job.model}` : ""}
+                        </div>
+                      </div>
+
+                      <div className="shrink-0">
+                        <StatusBadge status={job.status} />
+                      </div>
+                    </div>
+
+                    <div className="mt-3 grid gap-2 text-sm text-slate-300">
+                      <div>
+                        <span className="text-slate-500">Assigned:</span>{" "}
+                        {job.assigned_to_name || "Unassigned"}
+                      </div>
+
+                      <div>
+                        <span className="text-slate-500">Service:</span>{" "}
+                        {job.service_type || "—"}
+                      </div>
+
+                      <div>
+                        <span className="text-slate-500">Price:</span>{" "}
+                        {money(job.price)}
+                      </div>
+
+                      <div>
+                        <span className="text-slate-500">Created:</span>{" "}
+                        {formatDate(job.created_at)}
+                      </div>
+
+                      <div>
+                        <span className="text-slate-500">Updated:</span>{" "}
+                        {formatDateTime(job.updated_at || job.created_at)}
+                      </div>
+
+                      {age !== null && job.status !== "Completed" ? (
+                        <div>
+                          <span className="text-slate-500">Open for:</span>{" "}
+                          {age} day{age === 1 ? "" : "s"}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {job.donated ? (
+                        <FlagBadge tone="violet">Donated</FlagBadge>
+                      ) : job.paid ? (
+                        <FlagBadge tone="green">Paid</FlagBadge>
+                      ) : (
+                        <FlagBadge tone="amber">Unpaid</FlagBadge>
+                      )}
+
+                      {job.collected ? (
+                        <FlagBadge tone="blue">Collected</FlagBadge>
+                      ) : (
+                        <FlagBadge tone="rose">Not Collected</FlagBadge>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-col gap-4 border-t border-slate-800 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm text-slate-400">
+                Showing page <span className="font-medium text-white">{page}</span> of{" "}
+                <span className="font-medium text-white">{totalPages}</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setPage(1)}
+                  disabled={page === 1}
+                  className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2 text-white hover:bg-slate-800 disabled:opacity-50"
+                >
+                  First
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                  disabled={page === 1}
+                  className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2 text-white hover:bg-slate-800 disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                  disabled={page === totalPages}
+                  className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2 text-white hover:bg-slate-800 disabled:opacity-50"
+                >
+                  Next
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPage(totalPages)}
+                  disabled={page === totalPages}
+                  className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-2 text-white hover:bg-slate-800 disabled:opacity-50"
+                >
+                  Last
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
-      <div className="mt-1 text-sm font-medium text-white">{value || "—"}</div>
     </div>
   );
 }

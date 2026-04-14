@@ -61,92 +61,102 @@ Deno.serve(async (req) => {
 
     if (userError || !user) {
       return new Response(
-        JSON.stringify({
-          error: userError?.message || "Not authenticated",
-        }),
+        JSON.stringify({ error: userError?.message || "Not authenticated" }),
         { status: 401, headers: corsHeaders }
       );
     }
 
-    const { data: profile, error: profileError } = await adminClient
+    const { data: adminProfile, error: adminProfileError } = await adminClient
       .from("profiles")
-      .select("id,email,role,is_active,full_name")
+      .select("id,email,role,is_active")
       .eq("id", user.id)
       .single();
 
-    if (profileError || !profile) {
+    if (adminProfileError || !adminProfile) {
       return new Response(
         JSON.stringify({
-          error: profileError?.message || "Profile not found",
+          error: adminProfileError?.message || "Admin profile not found",
         }),
         { status: 403, headers: corsHeaders }
       );
     }
 
-    if (profile.role !== "admin" || !profile.is_active) {
+    if (adminProfile.role !== "admin" || !adminProfile.is_active) {
       return new Response(
-        JSON.stringify({
-          error: `Admin access required. role=${profile.role}, active=${profile.is_active}`,
-        }),
+        JSON.stringify({ error: "Admin access required" }),
         { status: 403, headers: corsHeaders }
       );
     }
 
     const body = await req.json();
-    const email = String(body.email || "").trim().toLowerCase();
-    const fullName = String(body.fullName || "").trim();
-    const role = body.role === "admin" ? "admin" : "staff";
-    const redirectTo =
-      typeof body.redirectTo === "string" && body.redirectTo
-        ? body.redirectTo
-        : `${new URL(req.url).origin}/login`;
+    const targetUserId = String(body.userId || "").trim();
 
-    if (!email) {
+    if (!targetUserId) {
       return new Response(
-        JSON.stringify({ error: "Email is required" }),
+        JSON.stringify({ error: "User ID is required" }),
         { status: 400, headers: corsHeaders }
       );
     }
 
-    const { data, error } = await adminClient.auth.admin.inviteUserByEmail(
-      email,
-      {
-        redirectTo,
-        data: {
-          full_name: fullName,
-          role,
-        },
-      }
+    if (targetUserId === user.id) {
+      return new Response(
+        JSON.stringify({ error: "You cannot delete your own account from here" }),
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    const { data: targetProfile } = await adminClient
+      .from("profiles")
+      .select("*")
+      .eq("id", targetUserId)
+      .maybeSingle();
+
+    await adminClient
+      .from("jobs")
+      .update({
+        assigned_to: null,
+        assigned_to_name: null,
+      })
+      .eq("assigned_to", targetUserId);
+
+    const { error: authDeleteError } = await adminClient.auth.admin.deleteUser(
+      targetUserId
     );
 
-    if (error) {
+    if (authDeleteError) {
       return new Response(
-        JSON.stringify({ error: error.message }),
+        JSON.stringify({ error: `Auth delete failed: ${authDeleteError.message}` }),
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    const { error: profileDeleteError } = await adminClient
+      .from("profiles")
+      .delete()
+      .eq("id", targetUserId);
+
+    if (profileDeleteError) {
+      return new Response(
+        JSON.stringify({
+          error: `Profile delete failed: ${profileDeleteError.message}`,
+        }),
         { status: 400, headers: corsHeaders }
       );
     }
 
     await adminClient.from("audit_logs").insert({
-      table_name: "user_invites",
-      record_id: data?.user?.id ?? null,
-      action: "INVITE",
+      table_name: "profiles",
+      record_id: targetUserId,
+      action: "DELETE",
       changed_by: user.id,
-      changed_by_email: profile.email || user.email || null,
-      old_data: null,
-      new_data: {
-        invited_email: email,
-        invited_name: fullName,
-        invited_role: role,
-        invited_user_id: data?.user?.id ?? null,
-      },
-      summary: `User invite sent to ${email} as ${role}`,
+      changed_by_email: adminProfile.email || user.email || null,
+      old_data: targetProfile || null,
+      new_data: null,
+      summary: `User deleted: ${targetProfile?.email || targetUserId}`,
     });
 
     return new Response(
-      JSON.stringify({
-        success: true,
-        user: data.user,
-      }),
+      JSON.stringify({ success: true }),
       { status: 200, headers: corsHeaders }
     );
   } catch (error) {

@@ -12,10 +12,20 @@ export default function AdminUsers() {
     role: "staff",
   });
   const [inviting, setInviting] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState("");
 
   useEffect(() => {
     loadProfiles();
+    loadCurrentUser();
   }, []);
+
+  async function loadCurrentUser() {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    setCurrentUserId(user?.id || "");
+  }
 
   async function loadProfiles() {
     setLoading(true);
@@ -26,7 +36,6 @@ export default function AdminUsers() {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("Error loading profiles:", error);
       setMessage(`Could not load users: ${error.message}`);
       setLoading(false);
       return;
@@ -59,17 +68,12 @@ export default function AdminUsers() {
         },
       });
 
-      console.log("invite-user data:", data);
-      console.log("invite-user error:", error);
-
       if (error) {
         let detailedMessage = error.message || "Could not send invite";
 
         try {
           if (error.context) {
             const text = await error.context.text();
-            console.log("invite-user raw error body:", text);
-
             try {
               const parsed = JSON.parse(text);
               detailedMessage =
@@ -78,9 +82,7 @@ export default function AdminUsers() {
               detailedMessage = text || detailedMessage;
             }
           }
-        } catch (readError) {
-          console.error("Could not read function error body:", readError);
-        }
+        } catch {}
 
         setMessage(detailedMessage);
         setInviting(false);
@@ -102,7 +104,6 @@ export default function AdminUsers() {
 
       await loadProfiles();
     } catch (error) {
-      console.error("Invite error:", error);
       setMessage(
         error instanceof Error ? error.message : "Could not send invite"
       );
@@ -128,6 +129,76 @@ export default function AdminUsers() {
     setMessage("User updated");
     setTimeout(() => setMessage(""), 2000);
     await loadProfiles();
+  }
+
+  async function handleRoleToggle(profile) {
+    const nextRole = profile.role === "admin" ? "staff" : "admin";
+    const confirmed = window.confirm(
+      `Change ${profile.email || "this user"} from ${profile.role || "staff"} to ${nextRole}?`
+    );
+    if (!confirmed) return;
+    await updateProfile(profile.id, { role: nextRole });
+  }
+
+  async function handleActiveToggle(profile) {
+    const nextState = !profile.is_active;
+    const confirmed = window.confirm(
+      `${nextState ? "Enable" : "Disable"} ${profile.email || "this user"}?`
+    );
+    if (!confirmed) return;
+    await updateProfile(profile.id, { is_active: nextState });
+  }
+
+  async function handleDeleteUser(profile) {
+    if (profile.id === currentUserId) {
+      alert("You cannot delete your own account from here.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete user ${profile.email || profile.full_name || profile.id}? This will remove their login account.`
+    );
+    if (!confirmed) return;
+
+    setMessage("");
+
+    try {
+      const { data, error } = await supabase.functions.invoke("delete-user", {
+        body: { userId: profile.id },
+      });
+
+      if (error) {
+        let detailedMessage = error.message || "Could not delete user";
+
+        try {
+          if (error.context) {
+            const text = await error.context.text();
+            try {
+              const parsed = JSON.parse(text);
+              detailedMessage =
+                parsed.error || parsed.message || text || detailedMessage;
+            } catch {
+              detailedMessage = text || detailedMessage;
+            }
+          }
+        } catch {}
+
+        setMessage(detailedMessage);
+        return;
+      }
+
+      if (data?.error) {
+        setMessage(data.error);
+        return;
+      }
+
+      setMessage("User deleted");
+      await loadProfiles();
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Could not delete user"
+      );
+    }
   }
 
   function roleBadge(role) {
@@ -156,26 +227,13 @@ export default function AdminUsers() {
 
       <div className="grid gap-4 md:grid-cols-4">
         <StatCard label="Total Users" value={profiles.length} />
-        <StatCard
-          label="Admins"
-          value={profiles.filter((p) => p.role === "admin").length}
-        />
-        <StatCard
-          label="Staff"
-          value={profiles.filter((p) => p.role !== "admin").length}
-        />
-        <StatCard
-          label="Active"
-          value={profiles.filter((p) => p.is_active).length}
-        />
+        <StatCard label="Admins" value={profiles.filter((p) => p.role === "admin").length} />
+        <StatCard label="Staff" value={profiles.filter((p) => p.role !== "admin").length} />
+        <StatCard label="Active" value={profiles.filter((p) => p.is_active).length} />
       </div>
 
       <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
         <h2 className="text-xl font-semibold text-white">Invite User</h2>
-        <p className="mt-2 text-sm text-slate-400">
-          Send an invite email to a new staff member or admin.
-        </p>
-
         <form onSubmit={handleInviteSubmit} className="mt-5 grid gap-4 md:grid-cols-4">
           <input
             name="fullName"
@@ -184,7 +242,6 @@ export default function AdminUsers() {
             placeholder="Full name"
             className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
           />
-
           <input
             name="email"
             type="email"
@@ -194,7 +251,6 @@ export default function AdminUsers() {
             required
             className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
           />
-
           <select
             name="role"
             value={inviteForm.role}
@@ -204,7 +260,6 @@ export default function AdminUsers() {
             <option value="staff">staff</option>
             <option value="admin">admin</option>
           </select>
-
           <button
             type="submit"
             disabled={inviting}
@@ -225,9 +280,7 @@ export default function AdminUsers() {
         {loading ? (
           <div className="text-slate-400">Loading users...</div>
         ) : profiles.length === 0 ? (
-          <div className="text-slate-400">
-            No user profiles yet. Create or invite a user first.
-          </div>
+          <div className="text-slate-400">No user profiles yet.</div>
         ) : (
           <div className="space-y-4">
             {profiles.map((profile) => (
@@ -244,39 +297,19 @@ export default function AdminUsers() {
                       {profile.email || "No email"}
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <span
-                        className={`inline-flex rounded-full border px-3 py-1 text-xs ${roleBadge(profile.role)}`}
-                      >
+                      <span className={`inline-flex rounded-full border px-3 py-1 text-xs ${roleBadge(profile.role)}`}>
                         {profile.role || "staff"}
                       </span>
-                      <span
-                        className={`inline-flex rounded-full border px-3 py-1 text-xs ${activeBadge(profile.is_active)}`}
-                      >
+                      <span className={`inline-flex rounded-full border px-3 py-1 text-xs ${activeBadge(profile.is_active)}`}>
                         {profile.is_active ? "Active" : "Inactive"}
                       </span>
                     </div>
-                    <div className="mt-3 text-xs text-slate-500">
-                      Created:{" "}
-                      {profile.created_at
-                        ? new Date(profile.created_at).toLocaleString()
-                        : "—"}
-                    </div>
-                    <div className="mt-1 text-xs text-slate-500">
-                      Updated:{" "}
-                      {profile.updated_at
-                        ? new Date(profile.updated_at).toLocaleString()
-                        : "—"}
-                    </div>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2 xl:w-[360px]">
+                  <div className="grid gap-3 sm:grid-cols-3 xl:w-[540px]">
                     <button
                       type="button"
-                      onClick={() =>
-                        updateProfile(profile.id, {
-                          role: profile.role === "admin" ? "staff" : "admin",
-                        })
-                      }
+                      onClick={() => handleRoleToggle(profile)}
                       className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-white hover:bg-slate-800"
                     >
                       {profile.role === "admin" ? "Make Staff" : "Make Admin"}
@@ -284,14 +317,19 @@ export default function AdminUsers() {
 
                     <button
                       type="button"
-                      onClick={() =>
-                        updateProfile(profile.id, {
-                          is_active: !profile.is_active,
-                        })
-                      }
+                      onClick={() => handleActiveToggle(profile)}
                       className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-white hover:bg-slate-800"
                     >
                       {profile.is_active ? "Disable User" : "Enable User"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteUser(profile)}
+                      disabled={profile.id === currentUserId}
+                      className="rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-rose-200 hover:bg-rose-500/20 disabled:opacity-50"
+                    >
+                      Delete User
                     </button>
                   </div>
                 </div>

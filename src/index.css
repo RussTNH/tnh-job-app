@@ -1,1 +1,36 @@
 @import "tailwindcss";
+
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  button,
+  nav,
+  aside,
+  header,
+  footer,
+  .no-print {
+    display: none !important;
+  }
+
+  .print-shell,
+  .print-shell * {
+    color: black !important;
+    background: white !important;
+    box-shadow: none !important;
+    border-color: #d1d5db !important;
+  }
+
+  .print-break-avoid {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .input {
+    border: 1px solid #d1d5db !important;
+    background: white !important;
+    color: black !important;
+  }
+}

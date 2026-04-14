@@ -105,7 +105,7 @@ export default function App() {
 
   if (appLoading) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
         Loading...
       </div>
     );
@@ -137,8 +137,8 @@ export default function App() {
         >
           <Route index element={<Dashboard />} />
           <Route path="jobs" element={<Jobs />} />
+          <Route path="jobs/new" element={<CreateJob />} />
           <Route path="jobs/:id" element={<JobDetail />} />
-          <Route path="create" element={<CreateJob />} />
 
           <Route
             path="admin/users"

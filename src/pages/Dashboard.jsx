@@ -1,26 +1,179 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 
+function formatDateTime(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+
+  return date.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function daysSince(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  const diffMs = Date.now() - date.getTime();
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
+}
+
+function money(value) {
+  const num = Number(value || 0);
+  if (Number.isNaN(num)) return "£0.00";
+  return `£${num.toFixed(2)}`;
+}
+
+function StatusBadge({ status }) {
+  const map = {
+    Open: "bg-slate-700 text-slate-100",
+    "In Progress": "bg-blue-600/20 text-blue-300",
+    "Waiting Parts": "bg-amber-500/20 text-amber-300",
+    "Ready for Collection": "bg-emerald-500/20 text-emerald-300",
+    Completed: "bg-violet-500/20 text-violet-300",
+  };
+
+  return (
+    <span
+      className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${
+        map[status] || "bg-slate-700 text-slate-100"
+      }`}
+    >
+      {status || "—"}
+    </span>
+  );
+}
+
+function SummaryCard({ title, value, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded-3xl border border-slate-800 bg-slate-900 p-5 text-left shadow-xl transition hover:bg-slate-800/60"
+    >
+      <div className="text-sm text-slate-400">{title}</div>
+      <div className="mt-2 text-3xl font-bold text-white">{value}</div>
+    </button>
+  );
+}
+
+function MoneyCard({ title, value, subtitle }) {
+  return (
+    <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5 shadow-xl">
+      <div className="text-sm text-slate-400">{title}</div>
+      <div className="mt-2 break-words text-3xl font-bold text-white">
+        {money(value)}
+      </div>
+      {subtitle ? <div className="mt-1 text-sm text-slate-500">{subtitle}</div> : null}
+    </div>
+  );
+}
+
+function JobListCard({
+  title,
+  subtitle,
+  jobs,
+  onOpenJob,
+  emptyText = "No jobs to show.",
+  showAge = false,
+}) {
+  return (
+    <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
+      <h2 className="text-xl font-semibold text-white">{title}</h2>
+      {subtitle ? <p className="mt-1 text-sm text-slate-400">{subtitle}</p> : null}
+
+      {jobs.length === 0 ? (
+        <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950 p-4 text-sm text-slate-400">
+          {emptyText}
+        </div>
+      ) : (
+        <div className="mt-4 space-y-3">
+          {jobs.map((job) => (
+            <button
+              key={job.id}
+              type="button"
+              onClick={() => onOpenJob(job.id)}
+              className="w-full rounded-2xl border border-slate-800 bg-slate-950 p-4 text-left transition hover:bg-slate-800"
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="text-sm text-blue-400">{job.job_number || "—"}</div>
+                  <div className="mt-1 break-words font-medium text-white">
+                    {job.customer || "No customer"}
+                  </div>
+                  <div className="mt-1 break-words text-sm text-slate-400">
+                    {job.device || "No device"}
+                    {job.assigned_to_name ? ` • ${job.assigned_to_name}` : " • Unassigned"}
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-start gap-2 sm:items-end">
+                  <StatusBadge status={job.status} />
+                  <div className="text-xs text-slate-500">
+                    Updated {formatDateTime(job.updated_at || job.created_at)}
+                  </div>
+                  {showAge && typeof job.ageDays === "number" ? (
+                    <div className="text-xs text-amber-300">
+                      Open for {job.ageDays} day{job.ageDays === 1 ? "" : "s"}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Dashboard() {
+  const navigate = useNavigate();
+
   const [jobs, setJobs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
-    fetchJobs();
+    loadDashboard();
   }, []);
 
-  async function fetchJobs() {
+  async function loadDashboard() {
     setLoading(true);
+    setLoadError("");
 
     const { data, error } = await supabase
       .from("jobs")
-      .select("*")
-      .order("created_at", { ascending: false });
+      .select(`
+        id,
+        job_number,
+        customer,
+        device,
+        status,
+        assigned_to,
+        assigned_to_name,
+        price,
+        labour_cost,
+        parts_cost,
+        paid,
+        donated,
+        collected,
+        created_at,
+        updated_at
+      `)
+      .order("updated_at", { ascending: false });
 
     if (error) {
-      console.error("Error fetching dashboard jobs:", error);
-      alert(`Error loading dashboard: ${error.message}`);
+      console.error("Error loading dashboard:", error);
+      setLoadError(error.message || "Unknown error");
+      setJobs([]);
       setLoading(false);
       return;
     }
@@ -29,344 +182,256 @@ export default function Dashboard() {
     setLoading(false);
   }
 
-  function isDonated(job) {
-    return Boolean(job.donated) || job.service_type === "Donated Item";
-  }
-
-  function formatPrice(value) {
-    if (value === null || value === undefined || value === "") return "£0.00";
-    return `£${Number(value).toFixed(2)}`;
-  }
-
-  function formatDate(value) {
-    if (!value) return "—";
-    return new Date(value).toLocaleString();
-  }
-
-  function statusBadgeClass(status) {
-    const map = {
-      Open: "bg-blue-500/15 text-blue-300 border-blue-500/30",
-      "In Progress": "bg-amber-500/15 text-amber-300 border-amber-500/30",
-      "Waiting Parts": "bg-orange-500/15 text-orange-300 border-orange-500/30",
-      "Ready for Collection": "bg-cyan-500/15 text-cyan-300 border-cyan-500/30",
-      Completed: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
-    };
-
-    return map[status] || "bg-slate-700/40 text-slate-200 border-slate-600";
-  }
-
-  function financeBadge(job) {
-    if (isDonated(job)) {
-      return {
-        text: "Donated",
-        cls: "bg-fuchsia-500/15 text-fuchsia-200 border-fuchsia-500/30",
-      };
-    }
-
-    return job.paid
-      ? {
-          text: "Paid",
-          cls: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
-        }
-      : {
-          text: "Unpaid",
-          cls: "bg-rose-500/15 text-rose-300 border-rose-500/30",
-        };
-  }
-
-  const metrics = useMemo(() => {
-    const total = jobs.length;
-    const open = jobs.filter((j) => j.status === "Open").length;
-    const inProgress = jobs.filter((j) => j.status === "In Progress").length;
-    const waitingParts = jobs.filter((j) => j.status === "Waiting Parts").length;
-    const readyForCollection = jobs.filter(
-      (j) => j.status === "Ready for Collection"
-    ).length;
-    const completed = jobs.filter((j) => j.status === "Completed").length;
-    const collected = jobs.filter((j) => Boolean(j.collected)).length;
-    const donated = jobs.filter((j) => isDonated(j)).length;
-    const paidJobs = jobs.filter((j) => !isDonated(j) && Boolean(j.paid)).length;
-    const unpaidJobs = jobs.filter((j) => !isDonated(j) && !Boolean(j.paid)).length;
-
-    const paidValue = jobs
-      .filter((j) => !isDonated(j) && Boolean(j.paid))
-      .reduce((sum, job) => sum + Number(job.price || 0), 0);
-
-    const unpaidValue = jobs
-      .filter((j) => !isDonated(j) && !Boolean(j.paid))
-      .reduce((sum, job) => sum + Number(job.price || 0), 0);
-
+  const stats = useMemo(() => {
     return {
-      total,
-      open,
-      inProgress,
-      waitingParts,
-      readyForCollection,
-      completed,
-      collected,
-      donated,
-      paidJobs,
-      unpaidJobs,
-      paidValue,
-      unpaidValue,
+      total: jobs.length,
+      open: jobs.filter((j) => j.status === "Open").length,
+      waitingParts: jobs.filter((j) => j.status === "Waiting Parts").length,
+      ready: jobs.filter((j) => j.status === "Ready for Collection").length,
+      unpaid: jobs.filter((j) => !j.paid && !j.donated).length,
+      uncollected: jobs.filter((j) => !j.collected).length,
     };
   }, [jobs]);
 
-  const recentJobs = jobs.slice(0, 6);
+  const financials = useMemo(() => {
+    const totalQuoted = jobs.reduce((sum, job) => sum + (Number(job.price) || 0), 0);
+    const totalLabour = jobs.reduce((sum, job) => sum + (Number(job.labour_cost) || 0), 0);
+    const totalParts = jobs.reduce((sum, job) => sum + (Number(job.parts_cost) || 0), 0);
+
+    const unpaidValue = jobs.reduce((sum, job) => {
+      if (job.donated) return sum;
+      if (job.paid) return sum;
+      return sum + (Number(job.price) || 0);
+    }, 0);
+
+    const donatedCount = jobs.filter((job) => job.donated).length;
+
+    return {
+      totalQuoted,
+      totalLabour,
+      totalParts,
+      unpaidValue,
+      donatedCount,
+    };
+  }, [jobs]);
+
+  const oldestActiveJobs = useMemo(() => {
+    return jobs
+      .filter(
+        (job) =>
+          job.status !== "Completed" &&
+          job.status !== "Ready for Collection"
+      )
+      .map((job) => ({
+        ...job,
+        ageDays: daysSince(job.created_at) ?? 0,
+      }))
+      .sort((a, b) => b.ageDays - a.ageDays)
+      .slice(0, 5);
+  }, [jobs]);
+
+  const recentlyUpdatedJobs = useMemo(() => {
+    return [...jobs]
+      .sort(
+        (a, b) =>
+          new Date(b.updated_at || b.created_at).getTime() -
+          new Date(a.updated_at || a.created_at).getTime()
+      )
+      .slice(0, 5);
+  }, [jobs]);
+
+  const readyForCollectionJobs = useMemo(() => {
+    return jobs
+      .filter((job) => job.status === "Ready for Collection")
+      .slice(0, 5);
+  }, [jobs]);
+
+  const unassignedJobs = useMemo(() => {
+    return jobs
+      .filter((job) => !job.assigned_to)
+      .slice(0, 5);
+  }, [jobs]);
+
+  if (loading) {
+    return (
+      <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 text-slate-300">
+        Loading dashboard...
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="rounded-3xl border border-rose-500/20 bg-slate-900 p-6 text-rose-200">
+        Could not load dashboard: {loadError}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-          <div>
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0">
             <div className="text-sm uppercase tracking-[0.25em] text-blue-400">
-              Workshop Overview
+              Workshop Hub
             </div>
             <h1 className="mt-2 text-3xl font-bold text-white">Dashboard</h1>
-            <p className="mt-2 max-w-2xl text-slate-400">
-              Live overview of workshop jobs, donation items, payment status, and what needs attention next.
+            <p className="mt-2 text-slate-400">
+              Live overview of workshop activity, priorities, and quick actions.
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-3">
-            <Link
-              to="/create"
-              className="rounded-2xl bg-gradient-to-r from-blue-600 to-violet-600 px-5 py-3 font-medium text-white shadow-lg hover:opacity-90"
+          <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto">
+            <button
+              type="button"
+              onClick={() => navigate("/jobs/new")}
+              className="w-full rounded-2xl bg-gradient-to-r from-blue-600 to-violet-600 px-5 py-3 font-medium text-white shadow-lg hover:opacity-90 sm:w-auto"
             >
-              + New Job
-            </Link>
+              + Create Job
+            </button>
 
-            <Link
-              to="/jobs"
-              className="rounded-2xl border border-slate-700 bg-slate-950 px-5 py-3 font-medium text-white hover:bg-slate-800"
+            <button
+              type="button"
+              onClick={() => navigate("/jobs")}
+              className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-5 py-3 font-medium text-white hover:bg-slate-800 sm:w-auto"
             >
               View All Jobs
-            </Link>
+            </button>
           </div>
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-        <MetricCard label="Total Jobs" value={metrics.total} />
-        <MetricCard label="Open" value={metrics.open} />
-        <MetricCard label="In Progress" value={metrics.inProgress} />
-        <MetricCard label="Waiting Parts" value={metrics.waitingParts} />
-        <MetricCard label="Ready for Collection" value={metrics.readyForCollection} />
-        <MetricCard label="Collected" value={metrics.collected} />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+        <SummaryCard title="Total Jobs" value={stats.total} onClick={() => navigate("/jobs")} />
+        <SummaryCard title="Open" value={stats.open} onClick={() => navigate("/jobs")} />
+        <SummaryCard
+          title="Waiting Parts"
+          value={stats.waitingParts}
+          onClick={() => navigate("/jobs")}
+        />
+        <SummaryCard
+          title="Ready for Collection"
+          value={stats.ready}
+          onClick={() => navigate("/jobs")}
+        />
+        <SummaryCard title="Unpaid" value={stats.unpaid} onClick={() => navigate("/jobs")} />
+        <SummaryCard
+          title="Uncollected"
+          value={stats.uncollected}
+          onClick={() => navigate("/jobs")}
+        />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Completed" value={metrics.completed} />
-        <MetricCard label="Paid Jobs" value={metrics.paidJobs} />
-        <MetricCard label="Unpaid Jobs" value={metrics.unpaidJobs} />
-        <MetricCard label="Donated Items" value={metrics.donated} highlight />
-      </div>
+      <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
+        <h2 className="text-xl font-semibold text-white">Financial Overview</h2>
+        <p className="mt-1 text-sm text-slate-400">
+          Live totals across quoted, labour, parts, and unpaid workshop value.
+        </p>
 
-      <div className="grid gap-6 xl:grid-cols-3">
-        <div className="xl:col-span-2 rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
-          <div className="mb-5 flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-white">Recent Jobs</h2>
-              <p className="mt-1 text-sm text-slate-400">
-                Most recently created or updated jobs in the system.
-              </p>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+          <MoneyCard title="Total Quoted Value" value={financials.totalQuoted} />
+          <MoneyCard title="Total Labour Value" value={financials.totalLabour} />
+          <MoneyCard title="Total Parts Value" value={financials.totalParts} />
+          <MoneyCard title="Outstanding Unpaid" value={financials.unpaidValue} />
+          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5 shadow-xl">
+            <div className="text-sm text-slate-400">Donated Jobs</div>
+            <div className="mt-2 text-3xl font-bold text-white">
+              {financials.donatedCount}
             </div>
-
-            <Link to="/jobs" className="text-sm text-blue-400 hover:underline">
-              Open Jobs →
-            </Link>
-          </div>
-
-          {loading ? (
-            <div className="rounded-2xl border border-slate-800 bg-slate-950 p-8 text-center text-slate-400">
-              Loading dashboard...
-            </div>
-          ) : recentJobs.length === 0 ? (
-            <div className="rounded-2xl border border-slate-800 bg-slate-950 p-8 text-center text-slate-400">
-              No jobs yet — create your first job to get started.
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {recentJobs.map((job) => {
-                const donated = isDonated(job);
-                const finance = financeBadge(job);
-
-                return (
-                  <Link
-                    key={job.id}
-                    to={`/jobs/${job.id}`}
-                    className={`block rounded-2xl border p-4 transition ${
-                      donated
-                        ? "border-fuchsia-500/30 bg-gradient-to-br from-slate-950 to-fuchsia-950/30 hover:border-fuchsia-400"
-                        : "border-slate-800 bg-slate-950 hover:border-blue-500 hover:bg-slate-900"
-                    }`}
-                  >
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                      <div className="min-w-0">
-                        <div className="text-xs uppercase tracking-[0.2em] text-slate-500">
-                          {job.job_number || "Job"}
-                        </div>
-                        <div className="mt-1 text-lg font-semibold text-white">
-                          {job.customer || "Unnamed customer"}
-                        </div>
-                        <div className="mt-1 text-sm text-slate-400">
-                          {job.device || "No device listed"}
-                        </div>
-                        <div className="mt-2 line-clamp-2 text-sm text-slate-300">
-                          {job.issue || "No issue description"}
-                        </div>
-                        <div className="mt-3 text-xs text-slate-500">
-                          Created: {formatDate(job.created_at)}
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col gap-2 lg:items-end">
-                        <span
-                          className={`inline-flex rounded-full border px-3 py-1 text-xs ${statusBadgeClass(job.status)}`}
-                        >
-                          {job.status || "Open"}
-                        </span>
-
-                        <span
-                          className={`inline-flex rounded-full border px-3 py-1 text-xs ${finance.cls}`}
-                        >
-                          {finance.text}
-                        </span>
-
-                        {donated ? (
-                          <span className="inline-flex rounded-full border border-fuchsia-500/30 bg-fuchsia-500/15 px-3 py-1 text-xs text-fuchsia-200">
-                            Donated Item
-                          </span>
-                        ) : null}
-
-                        <div className="text-sm font-medium text-white">
-                          {formatPrice(donated ? 0 : job.price)}
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-6">
-          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
-            <h2 className="text-xl font-semibold text-white">Payment Snapshot</h2>
-            <p className="mt-1 text-sm text-slate-400">
-              Quick view of paid and unpaid repair work value.
-            </p>
-
-            <div className="mt-5 space-y-4">
-              <SnapshotCard
-                label="Paid Value"
-                value={formatPrice(metrics.paidValue)}
-                tone="paid"
-              />
-              <SnapshotCard
-                label="Unpaid Value"
-                value={formatPrice(metrics.unpaidValue)}
-                tone="unpaid"
-              />
-              <SnapshotCard
-                label="Donated Items"
-                value={String(metrics.donated)}
-                tone="donated"
-              />
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
-            <h2 className="text-xl font-semibold text-white">Priority Queue</h2>
-            <p className="mt-1 text-sm text-slate-400">
-              Jobs most likely to need action soon.
-            </p>
-
-            <div className="mt-5 space-y-3">
-              <PriorityRow label="Ready for Collection" value={metrics.readyForCollection} tone="cyan" />
-              <PriorityRow label="Waiting Parts" value={metrics.waitingParts} tone="orange" />
-              <PriorityRow label="In Progress" value={metrics.inProgress} tone="amber" />
-              <PriorityRow label="Unpaid Jobs" value={metrics.unpaidJobs} tone="rose" />
-              <PriorityRow label="Donated Items" value={metrics.donated} tone="fuchsia" />
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
-            <h2 className="text-xl font-semibold text-white">Quick Actions</h2>
-            <div className="mt-5 grid gap-3">
-              <Link
-                to="/create"
-                className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white hover:bg-slate-800"
-              >
-                Create New Job
-              </Link>
-              <Link
-                to="/jobs"
-                className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white hover:bg-slate-800"
-              >
-                Open Jobs List
-              </Link>
-              <Link
-                to="/admin/settings"
-                className="rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white hover:bg-slate-800"
-              >
-                Open Settings
-              </Link>
+            <div className="mt-1 text-sm text-slate-500">
+              Excluded from unpaid total
             </div>
           </div>
         </div>
       </div>
-    </div>
-  );
-}
 
-function MetricCard({ label, value, highlight = false }) {
-  return (
-    <div
-      className={`rounded-3xl border p-5 shadow-xl ${
-        highlight
-          ? "border-fuchsia-500/30 bg-gradient-to-br from-slate-900 to-fuchsia-950/30"
-          : "border-slate-800 bg-slate-900"
-      }`}
-    >
-      <div className={`text-sm ${highlight ? "text-fuchsia-300" : "text-slate-400"}`}>
-        {label}
+      <div className="grid gap-6 xl:grid-cols-2">
+        <JobListCard
+          title="Oldest Active Jobs"
+          subtitle="Jobs open the longest and most likely to need attention."
+          jobs={oldestActiveJobs}
+          onOpenJob={(jobId) => navigate(`/jobs/${jobId}`)}
+          emptyText="No active jobs to show."
+          showAge
+        />
+
+        <JobListCard
+          title="Recently Updated"
+          subtitle="The latest activity across the workshop."
+          jobs={recentlyUpdatedJobs}
+          onOpenJob={(jobId) => navigate(`/jobs/${jobId}`)}
+        />
+
+        <JobListCard
+          title="Ready for Collection"
+          subtitle="Jobs ready to be handed back to customers."
+          jobs={readyForCollectionJobs}
+          onOpenJob={(jobId) => navigate(`/jobs/${jobId}`)}
+          emptyText="No jobs are ready for collection."
+        />
+
+        <JobListCard
+          title="Unassigned Jobs"
+          subtitle="Jobs that still need assigning to an engineer or user."
+          jobs={unassignedJobs}
+          onOpenJob={(jobId) => navigate(`/jobs/${jobId}`)}
+          emptyText="No unassigned jobs."
+        />
       </div>
-      <div className="mt-2 text-3xl font-bold text-white">{value}</div>
-    </div>
-  );
-}
 
-function SnapshotCard({ label, value, tone }) {
-  const toneClass =
-    tone === "paid"
-      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-      : tone === "unpaid"
-      ? "border-rose-500/30 bg-rose-500/10 text-rose-300"
-      : "border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-200";
+      <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
+        <h2 className="text-xl font-semibold text-white">Quick Actions</h2>
+        <p className="mt-1 text-sm text-slate-400">
+          Fast access to the most common workflow actions.
+        </p>
 
-  return (
-    <div className={`rounded-2xl border p-4 ${toneClass}`}>
-      <div className="text-sm">{label}</div>
-      <div className="mt-2 text-2xl font-bold">{value}</div>
-    </div>
-  );
-}
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <button
+            type="button"
+            onClick={() => navigate("/jobs/new")}
+            className="rounded-2xl border border-slate-800 bg-slate-950 p-5 text-left hover:bg-slate-800"
+          >
+            <div className="font-medium text-white">Create New Job</div>
+            <div className="mt-1 text-sm text-slate-400">
+              Add a new repair, drop-in, or donated item.
+            </div>
+          </button>
 
-function PriorityRow({ label, value, tone }) {
-  const tones = {
-    cyan: "border-cyan-500/30 bg-cyan-500/10 text-cyan-300",
-    orange: "border-orange-500/30 bg-orange-500/10 text-orange-300",
-    amber: "border-amber-500/30 bg-amber-500/10 text-amber-300",
-    rose: "border-rose-500/30 bg-rose-500/10 text-rose-300",
-    fuchsia: "border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-200",
-  };
+          <button
+            type="button"
+            onClick={() => navigate("/jobs")}
+            className="rounded-2xl border border-slate-800 bg-slate-950 p-5 text-left hover:bg-slate-800"
+          >
+            <div className="font-medium text-white">View Jobs List</div>
+            <div className="mt-1 text-sm text-slate-400">
+              Search and manage all workshop jobs.
+            </div>
+          </button>
 
-  return (
-    <div className={`flex items-center justify-between rounded-2xl border px-4 py-3 ${tones[tone]}`}>
-      <span className="text-sm">{label}</span>
-      <span className="text-lg font-bold">{value}</span>
+          <button
+            type="button"
+            onClick={() => navigate("/jobs")}
+            className="rounded-2xl border border-slate-800 bg-slate-950 p-5 text-left hover:bg-slate-800"
+          >
+            <div className="font-medium text-white">Review Ready Jobs</div>
+            <div className="mt-1 text-sm text-slate-400">
+              Check items that are ready for collection.
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate("/jobs")}
+            className="rounded-2xl border border-slate-800 bg-slate-950 p-5 text-left hover:bg-slate-800"
+          >
+            <div className="font-medium text-white">Check Unassigned</div>
+            <div className="mt-1 text-sm text-slate-400">
+              Find jobs that still need allocating.
+            </div>
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
