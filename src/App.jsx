@@ -11,6 +11,7 @@ import Dashboard from "./pages/Dashboard";
 import Jobs from "./pages/Jobs";
 import CreateJob from "./pages/CreateJob";
 import JobDetail from "./pages/JobDetail";
+import JobReceipt57mm from "./pages/JobReceipt57mm";
 import Suppliers from "./pages/Suppliers";
 import AdminSuppliers from "./pages/AdminSuppliers";
 import AdminUsers from "./pages/AdminUsers";
@@ -141,6 +142,7 @@ export default function App() {
           <Route path="jobs" element={<Jobs />} />
           <Route path="jobs/new" element={<CreateJob />} />
           <Route path="jobs/:id" element={<JobDetail />} />
+          <Route path="jobs/:id/receipt" element={<JobReceipt57mm />} />
           <Route path="suppliers" element={<Suppliers />} />
 
           <Route

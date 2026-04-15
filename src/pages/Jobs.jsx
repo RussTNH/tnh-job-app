@@ -11,6 +11,11 @@ function money(value) {
   return `£${num.toFixed(2)}`;
 }
 
+function numberValue(value) {
+  const num = Number(value || 0);
+  return Number.isNaN(num) ? 0 : num;
+}
+
 function formatDate(value) {
   if (!value) return "—";
   const date = new Date(value);
@@ -43,6 +48,19 @@ function daysSince(value) {
   const diffMs = Date.now() - date.getTime();
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
   return diffDays;
+}
+
+function getProfit(job) {
+  const price = numberValue(job.price);
+  const labour = numberValue(job.labour_cost);
+  const parts = numberValue(job.parts_cost);
+  return price - labour - parts;
+}
+
+function getProfitTone(profit) {
+  if (profit > 0) return "text-emerald-300";
+  if (profit < 0) return "text-rose-300";
+  return "text-slate-300";
 }
 
 function StatusBadge({ status }) {
@@ -86,7 +104,7 @@ function FlagBadge({ children, tone = "slate" }) {
   );
 }
 
-function StatCard({ label, value, onClick, active = false }) {
+function StatCard({ label, value, onClick, active = false, subvalue }) {
   return (
     <button
       type="button"
@@ -99,8 +117,85 @@ function StatCard({ label, value, onClick, active = false }) {
     >
       <div className="text-sm text-slate-400">{label}</div>
       <div className="mt-2 text-2xl font-bold text-white">{value}</div>
+      {subvalue ? <div className="mt-1 text-xs text-slate-500">{subvalue}</div> : null}
     </button>
   );
+}
+
+function getEngineerTone(key) {
+  if (!key) {
+    return {
+      card: "border-slate-800 bg-slate-950",
+      tableRow: "hover:bg-slate-800/40",
+      pill: "bg-slate-700/40 text-slate-200",
+      accent: "text-slate-400",
+    };
+  }
+
+  const tones = [
+    {
+      card: "border-blue-500/30 bg-blue-500/5",
+      tableRow: "bg-blue-500/[0.04] hover:bg-blue-500/[0.10]",
+      pill: "bg-blue-500/20 text-blue-300",
+      accent: "text-blue-300",
+    },
+    {
+      card: "border-emerald-500/30 bg-emerald-500/5",
+      tableRow: "bg-emerald-500/[0.04] hover:bg-emerald-500/[0.10]",
+      pill: "bg-emerald-500/20 text-emerald-300",
+      accent: "text-emerald-300",
+    },
+    {
+      card: "border-amber-500/30 bg-amber-500/5",
+      tableRow: "bg-amber-500/[0.04] hover:bg-amber-500/[0.10]",
+      pill: "bg-amber-500/20 text-amber-300",
+      accent: "text-amber-300",
+    },
+    {
+      card: "border-violet-500/30 bg-violet-500/5",
+      tableRow: "bg-violet-500/[0.04] hover:bg-violet-500/[0.10]",
+      pill: "bg-violet-500/20 text-violet-300",
+      accent: "text-violet-300",
+    },
+    {
+      card: "border-cyan-500/30 bg-cyan-500/5",
+      tableRow: "bg-cyan-500/[0.04] hover:bg-cyan-500/[0.10]",
+      pill: "bg-cyan-500/20 text-cyan-300",
+      accent: "text-cyan-300",
+    },
+    {
+      card: "border-pink-500/30 bg-pink-500/5",
+      tableRow: "bg-pink-500/[0.04] hover:bg-pink-500/[0.10]",
+      pill: "bg-pink-500/20 text-pink-300",
+      accent: "text-pink-300",
+    },
+    {
+      card: "border-lime-500/30 bg-lime-500/5",
+      tableRow: "bg-lime-500/[0.04] hover:bg-lime-500/[0.10]",
+      pill: "bg-lime-500/20 text-lime-300",
+      accent: "text-lime-300",
+    },
+    {
+      card: "border-orange-500/30 bg-orange-500/5",
+      tableRow: "bg-orange-500/[0.04] hover:bg-orange-500/[0.10]",
+      pill: "bg-orange-500/20 text-orange-300",
+      accent: "text-orange-300",
+    },
+    {
+      card: "border-indigo-500/30 bg-indigo-500/5",
+      tableRow: "bg-indigo-500/[0.04] hover:bg-indigo-500/[0.10]",
+      pill: "bg-indigo-500/20 text-indigo-300",
+      accent: "text-indigo-300",
+    },
+  ];
+
+  const str = String(key);
+  let hash = 0;
+  for (let i = 0; i < str.length; i += 1) {
+    hash = (hash * 31 + str.charCodeAt(i)) % 2147483647;
+  }
+
+  return tones[Math.abs(hash) % tones.length];
 }
 
 export default function Jobs() {
@@ -138,8 +233,12 @@ export default function Jobs() {
         job_number,
         customer,
         contact,
+        email,
+        phone,
         device,
+        make,
         model,
+        serial_number,
         service_type,
         status,
         assigned_to,
@@ -209,8 +308,12 @@ export default function Jobs() {
         (job.job_number || "").toLowerCase().includes(term) ||
         (job.customer || "").toLowerCase().includes(term) ||
         (job.contact || "").toLowerCase().includes(term) ||
+        (job.email || "").toLowerCase().includes(term) ||
+        (job.phone || "").toLowerCase().includes(term) ||
         (job.device || "").toLowerCase().includes(term) ||
+        (job.make || "").toLowerCase().includes(term) ||
         (job.model || "").toLowerCase().includes(term) ||
+        (job.serial_number || "").toLowerCase().includes(term) ||
         (job.assigned_to_name || "").toLowerCase().includes(term);
 
       const matchesStatus =
@@ -239,6 +342,11 @@ export default function Jobs() {
   }, [jobs, search, statusFilter, assignedFilter, paymentFilter]);
 
   const totals = useMemo(() => {
+    const totalQuoted = jobs.reduce((sum, job) => sum + numberValue(job.price), 0);
+    const totalProfit = jobs.reduce((sum, job) => sum + getProfit(job), 0);
+    const unassigned = jobs.filter((j) => !j.assigned_to).length;
+    const unpaid = jobs.filter((j) => !j.paid && !j.donated).length;
+
     return {
       total: jobs.length,
       open: jobs.filter((j) => j.status === "Open").length,
@@ -246,6 +354,10 @@ export default function Jobs() {
       waitingParts: jobs.filter((j) => j.status === "Waiting Parts").length,
       ready: jobs.filter((j) => j.status === "Ready for Collection").length,
       completed: jobs.filter((j) => j.status === "Completed").length,
+      totalQuoted,
+      totalProfit,
+      unassigned,
+      unpaid,
     };
   }, [jobs]);
 
@@ -321,10 +433,11 @@ export default function Jobs() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         <StatCard
           label="Total Jobs"
           value={totals.total}
+          subvalue={`Quoted ${money(totals.totalQuoted)}`}
           onClick={() => setStatusFilter("All")}
           active={statusFilter === "All"}
         />
@@ -357,6 +470,19 @@ export default function Jobs() {
           value={totals.completed}
           onClick={() => toggleStatusFilter("Completed")}
           active={statusFilter === "Completed"}
+        />
+        <StatCard
+          label="Unassigned"
+          value={totals.unassigned}
+          onClick={() => setAssignedFilter("Unassigned")}
+          active={assignedFilter === "Unassigned"}
+        />
+        <StatCard
+          label="Estimated Profit"
+          value={money(totals.totalProfit)}
+          subvalue={totals.unpaid ? `${totals.unpaid} unpaid job(s)` : "All caught up"}
+          onClick={() => setPaymentFilter("Unpaid")}
+          active={paymentFilter === "Unpaid"}
         />
       </div>
 
@@ -398,7 +524,7 @@ export default function Jobs() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Job number, customer, device, model, assigned user..."
+              placeholder="Job number, customer, device, serial, assigned user..."
               className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-3 text-white"
             />
           </div>
@@ -467,28 +593,54 @@ export default function Jobs() {
           <div className="mt-4 text-slate-400">No active jobs to show.</div>
         ) : (
           <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-            {oldestActiveJobs.map((job) => (
-              <button
-                key={job.id}
-                type="button"
-                onClick={() => navigate(`/jobs/${job.id}`)}
-                className="rounded-2xl border border-slate-800 bg-slate-950 p-4 text-left hover:bg-slate-800"
-              >
-                <div className="text-sm text-blue-400">{job.job_number || "—"}</div>
-                <div className="mt-2 font-medium text-white">
-                  {job.customer || "No customer"}
-                </div>
-                <div className="mt-1 text-sm text-slate-400">
-                  {job.device || "No device"}
-                </div>
-                <div className="mt-3 flex items-center justify-between gap-3">
-                  <StatusBadge status={job.status} />
-                  <span className="text-xs text-amber-300">
-                    {job.ageDays} day{job.ageDays === 1 ? "" : "s"}
-                  </span>
-                </div>
-              </button>
-            ))}
+            {oldestActiveJobs.map((job) => {
+              const profit = getProfit(job);
+              const tone = getEngineerTone(job.assigned_to || job.assigned_to_name);
+
+              return (
+                <button
+                  key={job.id}
+                  type="button"
+                  onClick={() => navigate(`/jobs/${job.id}`)}
+                  className={`rounded-2xl border p-4 text-left transition hover:bg-slate-800 ${tone.card}`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-sm text-blue-400">{job.job_number || "—"}</div>
+                    {job.assigned_to_name ? (
+                      <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${tone.pill}`}>
+                        {job.assigned_to_name}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-2 font-medium text-white">
+                    {job.customer || "No customer"}
+                  </div>
+
+                  <div className="mt-1 text-sm text-slate-400">
+                    {job.device || "No device"}
+                    {job.make ? ` • ${job.make}` : ""}
+                    {job.model ? ` • ${job.model}` : ""}
+                  </div>
+
+                  <div className={`mt-1 text-sm ${job.assigned_to_name ? tone.accent : "text-slate-500"}`}>
+                    {job.assigned_to_name || "Unassigned"}
+                  </div>
+
+                  <div className="mt-2 text-sm">
+                    <span className="text-slate-500">Profit:</span>{" "}
+                    <span className={getProfitTone(profit)}>{money(profit)}</span>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between gap-3">
+                    <StatusBadge status={job.status} />
+                    <span className="text-xs text-amber-300">
+                      {job.ageDays} day{job.ageDays === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -523,6 +675,7 @@ export default function Jobs() {
                     <th className="px-6 py-4 font-medium">Assigned</th>
                     <th className="px-6 py-4 font-medium">Dates</th>
                     <th className="px-6 py-4 font-medium">Financial</th>
+                    <th className="px-6 py-4 font-medium">Profit</th>
                     <th className="px-6 py-4 font-medium">Flags</th>
                     <th className="px-6 py-4 font-medium">Actions</th>
                   </tr>
@@ -530,12 +683,14 @@ export default function Jobs() {
                 <tbody>
                   {paginatedJobs.map((job) => {
                     const age = daysSince(job.created_at);
+                    const profit = getProfit(job);
+                    const tone = getEngineerTone(job.assigned_to || job.assigned_to_name);
 
                     return (
                       <tr
                         key={job.id}
                         onClick={() => navigate(`/jobs/${job.id}`)}
-                        className="cursor-pointer border-t border-slate-800 hover:bg-slate-800/40"
+                        className={`cursor-pointer border-t border-slate-800 transition ${tone.tableRow}`}
                       >
                         <td className="px-6 py-4 align-top">
                           <div className="font-medium text-white">{job.job_number || "—"}</div>
@@ -550,8 +705,14 @@ export default function Jobs() {
                           </div>
                           <div className="mt-1 text-sm text-slate-400">
                             {job.device || "No device"}
+                            {job.make ? ` • ${job.make}` : ""}
                             {job.model ? ` • ${job.model}` : ""}
                           </div>
+                          {job.serial_number ? (
+                            <div className="mt-1 text-xs text-slate-500">
+                              S/N: {job.serial_number}
+                            </div>
+                          ) : null}
                         </td>
 
                         <td className="px-6 py-4 align-top">
@@ -569,6 +730,9 @@ export default function Jobs() {
                           <div className="text-white">
                             {job.assigned_to_name || "Unassigned"}
                           </div>
+                          <div className={`mt-1 text-xs ${job.assigned_to_name ? tone.accent : "text-slate-500"}`}>
+                            {job.assigned_to ? "Assigned engineer" : "Awaiting assignment"}
+                          </div>
                         </td>
 
                         <td className="px-6 py-4 align-top">
@@ -583,7 +747,19 @@ export default function Jobs() {
                         <td className="px-6 py-4 align-top">
                           <div className="text-white">{money(job.price)}</div>
                           <div className="mt-1 text-sm text-slate-400">
-                            Labour: {money(job.labour_cost)} • Parts: {money(job.parts_cost)}
+                            Labour: {money(job.labour_cost)}
+                          </div>
+                          <div className="mt-1 text-sm text-slate-400">
+                            Parts: {money(job.parts_cost)}
+                          </div>
+                        </td>
+
+                        <td className="px-6 py-4 align-top">
+                          <div className={`font-medium ${getProfitTone(profit)}`}>
+                            {money(profit)}
+                          </div>
+                          <div className="mt-1 text-xs text-slate-500">
+                            Price - labour - parts
                           </div>
                         </td>
 
@@ -640,11 +816,13 @@ export default function Jobs() {
             <div className="space-y-4 p-4 md:hidden">
               {paginatedJobs.map((job) => {
                 const age = daysSince(job.created_at);
+                const profit = getProfit(job);
+                const tone = getEngineerTone(job.assigned_to || job.assigned_to_name);
 
                 return (
                   <div
                     key={job.id}
-                    className="w-full rounded-2xl border border-slate-800 bg-slate-950 p-4"
+                    className={`w-full rounded-2xl border p-4 ${tone.card}`}
                   >
                     <button
                       type="button"
@@ -661,8 +839,14 @@ export default function Jobs() {
                           </div>
                           <div className="mt-1 text-sm text-slate-400">
                             {job.device || "No device"}
+                            {job.make ? ` • ${job.make}` : ""}
                             {job.model ? ` • ${job.model}` : ""}
                           </div>
+                          {job.assigned_to_name ? (
+                            <div className={`mt-2 inline-flex rounded-full px-2 py-1 text-[11px] font-medium ${tone.pill}`}>
+                              {job.assigned_to_name}
+                            </div>
+                          ) : null}
                         </div>
 
                         <div className="shrink-0">
@@ -685,6 +869,28 @@ export default function Jobs() {
                           <span className="text-slate-500">Price:</span>{" "}
                           {money(job.price)}
                         </div>
+
+                        <div>
+                          <span className="text-slate-500">Labour:</span>{" "}
+                          {money(job.labour_cost)}
+                        </div>
+
+                        <div>
+                          <span className="text-slate-500">Parts:</span>{" "}
+                          {money(job.parts_cost)}
+                        </div>
+
+                        <div>
+                          <span className="text-slate-500">Profit:</span>{" "}
+                          <span className={getProfitTone(profit)}>{money(profit)}</span>
+                        </div>
+
+                        {job.serial_number ? (
+                          <div>
+                            <span className="text-slate-500">Serial:</span>{" "}
+                            {job.serial_number}
+                          </div>
+                        ) : null}
 
                         <div>
                           <span className="text-slate-500">Created:</span>{" "}
