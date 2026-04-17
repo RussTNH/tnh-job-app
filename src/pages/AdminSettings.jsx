@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-export default function Settings() {
+export default function AdminSettings() {
   const [status, setStatus] = useState("");
 
   const testPrint = async () => {
@@ -16,7 +16,6 @@ export default function Settings() {
       });
 
       const text = await res.text();
-
       setStatus(`Response: ${res.status} ${text}`);
       alert(`Printer response: ${res.status} ${text}`);
     } catch (err) {
@@ -27,9 +26,10 @@ export default function Settings() {
 
   return (
     <div style={{ padding: "20px" }}>
-      <h1>Settings</h1>
-
-      <p>Printer Bridge Test</p>
+      <h1>ADMIN SETTINGS PAGE TEST</h1>
+      <p style={{ fontWeight: "bold", color: "red" }}>
+        BUILD MARKER: ADMIN SETTINGS LIVE
+      </p>
 
       <button
         onClick={testPrint}
