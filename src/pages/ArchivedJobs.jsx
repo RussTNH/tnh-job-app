@@ -104,21 +104,13 @@ function FlagBadge({ children, tone = "slate" }) {
   );
 }
 
-function StatCard({ label, value, onClick, active = false, subvalue }) {
+function StatCard({ label, value, subvalue }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-3xl border p-5 text-left shadow-xl transition ${
-        active
-          ? "border-blue-500 bg-slate-800"
-          : "border-slate-800 bg-slate-900 hover:bg-slate-800/60"
-      }`}
-    >
+    <div className="rounded-3xl border border-slate-800 bg-slate-900 p-5 text-left shadow-xl">
       <div className="text-sm text-slate-400">{label}</div>
       <div className="mt-2 text-2xl font-bold text-white">{value}</div>
       {subvalue ? <div className="mt-1 text-xs text-slate-500">{subvalue}</div> : null}
-    </button>
+    </div>
   );
 }
 
@@ -198,7 +190,7 @@ function getEngineerTone(key) {
   return tones[Math.abs(hash) % tones.length];
 }
 
-export default function Jobs() {
+export default function ArchivedJobs() {
   const navigate = useNavigate();
 
   const [jobs, setJobs] = useState([]);
@@ -206,7 +198,7 @@ export default function Jobs() {
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [archivingJobId, setArchivingJobId] = useState("");
+  const [unarchivingJobId, setUnarchivingJobId] = useState("");
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -256,11 +248,11 @@ export default function Jobs() {
         archived
       `)
       .neq("job_type", "media_conversion")
-      .eq("archived", false)
-      .order("created_at", { ascending: false });
+      .eq("archived", true)
+      .order("updated_at", { ascending: false });
 
     if (error) {
-      console.error("Error loading jobs:", error);
+      console.error("Error loading archived jobs:", error);
       setLoadError(error.message || "Unknown error");
       setJobs([]);
       setLoading(false);
@@ -286,24 +278,24 @@ export default function Jobs() {
     setUsers(data || []);
   }
 
-  async function archiveJob(job) {
+  async function unarchiveJob(job) {
     const confirmed = window.confirm(
-      `Archive job ${job.job_number || ""}? It will move to Archived Jobs but remain retrievable.`
+      `Unarchive job ${job.job_number || ""}? It will return to the active jobs list.`
     );
     if (!confirmed) return;
 
-    setArchivingJobId(job.id);
+    setUnarchivingJobId(job.id);
 
     const { error } = await supabase
       .from("jobs")
-      .update({ archived: true })
+      .update({ archived: false })
       .eq("id", job.id);
 
-    setArchivingJobId("");
+    setUnarchivingJobId("");
 
     if (error) {
-      console.error("Archive job error:", error);
-      alert(`Could not archive job: ${error.message}`);
+      console.error("Unarchive job error:", error);
+      alert(`Could not unarchive job: ${error.message}`);
       return;
     }
 
@@ -367,8 +359,6 @@ export default function Jobs() {
   const totals = useMemo(() => {
     const totalQuoted = jobs.reduce((sum, job) => sum + numberValue(job.price), 0);
     const totalProfit = jobs.reduce((sum, job) => sum + getProfit(job), 0);
-    const unassigned = jobs.filter((j) => !j.assigned_to).length;
-    const unpaid = jobs.filter((j) => !j.paid && !j.donated).length;
 
     return {
       total: jobs.length,
@@ -379,20 +369,7 @@ export default function Jobs() {
       completed: jobs.filter((j) => j.status === "Completed").length,
       totalQuoted,
       totalProfit,
-      unassigned,
-      unpaid,
     };
-  }, [jobs]);
-
-  const oldestActiveJobs = useMemo(() => {
-    return jobs
-      .filter((job) => job.status !== "Completed" && job.status !== "Ready for Collection")
-      .map((job) => ({
-        ...job,
-        ageDays: daysSince(job.created_at) ?? 0,
-      }))
-      .sort((a, b) => b.ageDays - a.ageDays)
-      .slice(0, 5);
   }, [jobs]);
 
   const totalPages = Math.max(1, Math.ceil(filteredJobs.length / PAGE_SIZE));
@@ -415,7 +392,7 @@ export default function Jobs() {
   if (loading) {
     return (
       <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 text-slate-300">
-        Loading jobs...
+        Loading archived jobs...
       </div>
     );
   }
@@ -423,7 +400,7 @@ export default function Jobs() {
   if (loadError) {
     return (
       <div className="rounded-3xl border border-rose-500/20 bg-slate-900 p-6 text-rose-200">
-        Could not load jobs: {loadError}
+        Could not load archived jobs: {loadError}
       </div>
     );
   }
@@ -433,30 +410,22 @@ export default function Jobs() {
       <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="text-sm uppercase tracking-[0.25em] text-blue-400">
-              Workshop
+            <div className="text-sm uppercase tracking-[0.25em] text-amber-400">
+              Workshop Archive
             </div>
-            <h1 className="mt-2 text-3xl font-bold text-white">Jobs</h1>
+            <h1 className="mt-2 text-3xl font-bold text-white">Archived Jobs</h1>
             <p className="mt-2 text-slate-400">
-              Search, filter, and manage all active workshop jobs.
+              View archived workshop jobs without cluttering the active jobs list.
             </p>
           </div>
 
           <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
             <button
               type="button"
-              onClick={() => navigate("/jobs/new")}
-              className="w-full rounded-2xl bg-gradient-to-r from-blue-600 to-violet-600 px-5 py-3 font-medium text-white shadow-lg hover:opacity-90 sm:w-auto"
+              onClick={() => navigate("/jobs")}
+              className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-5 py-3 font-medium text-white hover:bg-slate-800 sm:w-auto"
             >
-              + Create Job
-            </button>
-
-            <button
-              type="button"
-              onClick={() => navigate("/media/new")}
-              className="w-full rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-3 font-medium text-white shadow-lg hover:opacity-90 sm:w-auto"
-            >
-              + Media Conversion
+              Back to Active Jobs
             </button>
           </div>
         </div>
@@ -464,55 +433,16 @@ export default function Jobs() {
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         <StatCard
-          label="Total Jobs"
+          label="Archived Jobs"
           value={totals.total}
           subvalue={`Quoted ${money(totals.totalQuoted)}`}
-          onClick={() => setStatusFilter("All")}
-          active={statusFilter === "All"}
         />
-        <StatCard
-          label="Open"
-          value={totals.open}
-          onClick={() => toggleStatusFilter("Open")}
-          active={statusFilter === "Open"}
-        />
-        <StatCard
-          label="In Progress"
-          value={totals.inProgress}
-          onClick={() => toggleStatusFilter("In Progress")}
-          active={statusFilter === "In Progress"}
-        />
-        <StatCard
-          label="Waiting Parts"
-          value={totals.waitingParts}
-          onClick={() => toggleStatusFilter("Waiting Parts")}
-          active={statusFilter === "Waiting Parts"}
-        />
-        <StatCard
-          label="Ready"
-          value={totals.ready}
-          onClick={() => toggleStatusFilter("Ready for Collection")}
-          active={statusFilter === "Ready for Collection"}
-        />
-        <StatCard
-          label="Completed"
-          value={totals.completed}
-          onClick={() => toggleStatusFilter("Completed")}
-          active={statusFilter === "Completed"}
-        />
-        <StatCard
-          label="Unassigned"
-          value={totals.unassigned}
-          onClick={() => setAssignedFilter("Unassigned")}
-          active={assignedFilter === "Unassigned"}
-        />
-        <StatCard
-          label="Estimated Profit"
-          value={money(totals.totalProfit)}
-          subvalue={totals.unpaid ? `${totals.unpaid} unpaid job(s)` : "All caught up"}
-          onClick={() => setPaymentFilter("Unpaid")}
-          active={paymentFilter === "Unpaid"}
-        />
+        <StatCard label="Open" value={totals.open} />
+        <StatCard label="In Progress" value={totals.inProgress} />
+        <StatCard label="Waiting Parts" value={totals.waitingParts} />
+        <StatCard label="Ready" value={totals.ready} />
+        <StatCard label="Completed" value={totals.completed} />
+        <StatCard label="Estimated Profit" value={money(totals.totalProfit)} />
       </div>
 
       <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
@@ -525,7 +455,7 @@ export default function Jobs() {
                 onClick={() => toggleStatusFilter(status)}
                 className={`rounded-full px-4 py-2 text-sm font-medium transition ${
                   statusFilter === status
-                    ? "bg-blue-600 text-white"
+                    ? "bg-amber-600 text-white"
                     : "bg-slate-950 text-slate-300 hover:bg-slate-800"
                 }`}
               >
@@ -608,79 +538,13 @@ export default function Jobs() {
         </div>
       </div>
 
-      <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-white">Oldest Active Jobs</h2>
-            <p className="mt-1 text-sm text-slate-400">
-              Jobs that have been open the longest and may need attention.
-            </p>
-          </div>
-        </div>
-
-        {oldestActiveJobs.length === 0 ? (
-          <div className="mt-4 text-slate-400">No active jobs to show.</div>
-        ) : (
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-            {oldestActiveJobs.map((job) => {
-              const profit = getProfit(job);
-              const tone = getEngineerTone(job.assigned_to || job.assigned_to_name);
-
-              return (
-                <button
-                  key={job.id}
-                  type="button"
-                  onClick={() => navigate(`/jobs/${job.id}`)}
-                  className={`rounded-2xl border p-4 text-left transition hover:bg-slate-800 ${tone.card}`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-sm text-blue-400">{job.job_number || "—"}</div>
-                    {job.assigned_to_name ? (
-                      <span className={`rounded-full px-2 py-1 text-[11px] font-medium ${tone.pill}`}>
-                        {job.assigned_to_name}
-                      </span>
-                    ) : null}
-                  </div>
-
-                  <div className="mt-2 font-medium text-white">
-                    {job.customer || "No customer"}
-                  </div>
-
-                  <div className="mt-1 text-sm text-slate-400">
-                    {job.device || "No device"}
-                    {job.make ? ` • ${job.make}` : ""}
-                    {job.model ? ` • ${job.model}` : ""}
-                  </div>
-
-                  <div className={`mt-1 text-sm ${job.assigned_to_name ? tone.accent : "text-slate-500"}`}>
-                    {job.assigned_to_name || "Unassigned"}
-                  </div>
-
-                  <div className="mt-2 text-sm">
-                    <span className="text-slate-500">Profit:</span>{" "}
-                    <span className={getProfitTone(profit)}>{money(profit)}</span>
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    <StatusBadge status={job.status} />
-                    <span className="text-xs text-amber-300">
-                      {job.ageDays} day{job.ageDays === 1 ? "" : "s"}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
       <div className="rounded-3xl border border-slate-800 bg-slate-900 shadow-xl">
         <div className="border-b border-slate-800 px-6 py-4">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
             <div className="text-sm text-slate-400">
               Showing <span className="font-medium text-white">{paginatedJobs.length}</span> on
               this page of <span className="font-medium text-white">{filteredJobs.length}</span>{" "}
-              filtered active jobs
+              filtered archived jobs
             </div>
 
             <div className="text-sm text-slate-400">
@@ -691,7 +555,7 @@ export default function Jobs() {
         </div>
 
         {filteredJobs.length === 0 ? (
-          <div className="p-6 text-slate-400">No jobs matched your filters.</div>
+          <div className="p-6 text-slate-400">No archived jobs matched your filters.</div>
         ) : (
           <>
             <div className="hidden overflow-x-auto md:block">
@@ -714,7 +578,7 @@ export default function Jobs() {
                     const age = daysSince(job.created_at);
                     const profit = getProfit(job);
                     const tone = getEngineerTone(job.assigned_to || job.assigned_to_name);
-                    const isArchiving = archivingJobId === job.id;
+                    const isUnarchiving = unarchivingJobId === job.id;
 
                     return (
                       <tr
@@ -748,9 +612,9 @@ export default function Jobs() {
                         <td className="px-6 py-4 align-top">
                           <div className="space-y-2">
                             <StatusBadge status={job.status} />
-                            {age !== null && job.status !== "Completed" ? (
+                            {age !== null ? (
                               <div className="text-xs text-slate-500">
-                                Open for {age} day{age === 1 ? "" : "s"}
+                                Originally created {age} day{age === 1 ? "" : "s"} ago
                               </div>
                             ) : null}
                           </div>
@@ -793,6 +657,8 @@ export default function Jobs() {
 
                         <td className="px-6 py-4 align-top">
                           <div className="flex flex-wrap gap-2">
+                            <FlagBadge tone="amber">Archived</FlagBadge>
+
                             {job.donated ? (
                               <FlagBadge tone="violet">Donated</FlagBadge>
                             ) : job.paid ? (
@@ -837,12 +703,12 @@ export default function Jobs() {
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                archiveJob(job);
+                                unarchiveJob(job);
                               }}
-                              disabled={isArchiving}
-                              className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-white hover:bg-amber-500/20 disabled:opacity-50"
+                              disabled={isUnarchiving}
+                              className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-white hover:bg-emerald-500/20 disabled:opacity-50"
                             >
-                              {isArchiving ? "Archiving..." : "Archive"}
+                              {isUnarchiving ? "Restoring..." : "Unarchive"}
                             </button>
                           </div>
                         </td>
@@ -858,7 +724,7 @@ export default function Jobs() {
                 const age = daysSince(job.created_at);
                 const profit = getProfit(job);
                 const tone = getEngineerTone(job.assigned_to || job.assigned_to_name);
-                const isArchiving = archivingJobId === job.id;
+                const isUnarchiving = unarchivingJobId === job.id;
 
                 return (
                   <div
@@ -872,7 +738,7 @@ export default function Jobs() {
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <div className="text-sm text-blue-400">
+                          <div className="text-sm text-amber-400">
                             {job.job_number || "—"}
                           </div>
                           <div className="mt-1 font-medium text-white">
@@ -943,9 +809,9 @@ export default function Jobs() {
                           {formatDateTime(job.updated_at || job.created_at)}
                         </div>
 
-                        {age !== null && job.status !== "Completed" ? (
+                        {age !== null ? (
                           <div>
-                            <span className="text-slate-500">Open for:</span>{" "}
+                            <span className="text-slate-500">Age:</span>{" "}
                             {age} day{age === 1 ? "" : "s"}
                           </div>
                         ) : null}
@@ -953,6 +819,8 @@ export default function Jobs() {
                     </button>
 
                     <div className="mt-3 flex flex-wrap gap-2">
+                      <FlagBadge tone="amber">Archived</FlagBadge>
+
                       {job.donated ? (
                         <FlagBadge tone="violet">Donated</FlagBadge>
                       ) : job.paid ? (
@@ -987,11 +855,11 @@ export default function Jobs() {
 
                       <button
                         type="button"
-                        onClick={() => archiveJob(job)}
-                        disabled={isArchiving}
-                        className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-3 text-sm text-white hover:bg-amber-500/20 disabled:opacity-50"
+                        onClick={() => unarchiveJob(job)}
+                        disabled={isUnarchiving}
+                        className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-3 text-sm text-white hover:bg-emerald-500/20 disabled:opacity-50"
                       >
-                        {isArchiving ? "..." : "Archive"}
+                        {isUnarchiving ? "..." : "Restore"}
                       </button>
                     </div>
                   </div>

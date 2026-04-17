@@ -9,9 +9,16 @@ import AdminRoute from "./components/AdminRoute";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Jobs from "./pages/Jobs";
+import ArchivedJobs from "./pages/ArchivedJobs";
 import CreateJob from "./pages/CreateJob";
+import CreateMediaJob from "./pages/CreateMediaJob";
+import MediaJobs from "./pages/MediaJobs";
+import ArchivedMediaJobs from "./pages/ArchivedMediaJobs";
 import JobDetail from "./pages/JobDetail";
 import JobReceipt57mm from "./pages/JobReceipt57mm";
+import MediaLabelSheet from "./pages/MediaLabelSheet";
+import MediaSummarySheet from "./pages/MediaSummarySheet";
+import JobSummarySheet from "./pages/JobSummarySheet";
 import Suppliers from "./pages/Suppliers";
 import AdminSuppliers from "./pages/AdminSuppliers";
 import AdminUsers from "./pages/AdminUsers";
@@ -140,9 +147,16 @@ export default function App() {
         >
           <Route index element={<Dashboard />} />
           <Route path="jobs" element={<Jobs />} />
+          <Route path="jobs/archived" element={<ArchivedJobs />} />
           <Route path="jobs/new" element={<CreateJob />} />
+          <Route path="media" element={<MediaJobs />} />
+          <Route path="media/archived" element={<ArchivedMediaJobs />} />
+          <Route path="media/new" element={<CreateMediaJob />} />
           <Route path="jobs/:id" element={<JobDetail />} />
           <Route path="jobs/:id/receipt" element={<JobReceipt57mm />} />
+          <Route path="jobs/:id/summary-sheet" element={<JobSummarySheet />} />
+          <Route path="jobs/:id/media-label-sheet" element={<MediaLabelSheet />} />
+          <Route path="jobs/:id/media-summary-sheet" element={<MediaSummarySheet />} />
           <Route path="suppliers" element={<Suppliers />} />
 
           <Route

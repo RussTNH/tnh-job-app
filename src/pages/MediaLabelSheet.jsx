@@ -556,23 +556,6 @@ export default function JobDetail() {
     window.print();
   }
 
-  function handlePrintJobSummarySheet() {
-    const printWindow = window.open(`/jobs/${id}/summary-sheet`, "_blank");
-
-    if (!printWindow) {
-      alert("Pop-up blocked. Please allow pop-ups and try again.");
-      return;
-    }
-
-    setTimeout(() => {
-      try {
-        printWindow.focus();
-      } catch (err) {
-        console.error("Job summary open error:", err);
-      }
-    }, 500);
-  }
-
   function handleReceiptPrint57mm() {
     const receiptWindow = window.open(`/jobs/${id}/receipt`, "_blank");
 
@@ -586,40 +569,6 @@ export default function JobDetail() {
         receiptWindow.focus();
       } catch (err) {
         console.error("Receipt open error:", err);
-      }
-    }, 500);
-  }
-
-  function handlePrintMediaItemSheet() {
-    const printWindow = window.open(`/jobs/${id}/media-label-sheet`, "_blank");
-
-    if (!printWindow) {
-      alert("Pop-up blocked. Please allow pop-ups and try again.");
-      return;
-    }
-
-    setTimeout(() => {
-      try {
-        printWindow.focus();
-      } catch (err) {
-        console.error("Media sheet open error:", err);
-      }
-    }, 500);
-  }
-
-  function handlePrintMediaSummarySheet() {
-    const printWindow = window.open(`/jobs/${id}/media-summary-sheet`, "_blank");
-
-    if (!printWindow) {
-      alert("Pop-up blocked. Please allow pop-ups and try again.");
-      return;
-    }
-
-    setTimeout(() => {
-      try {
-        printWindow.focus();
-      } catch (err) {
-        console.error("Media summary open error:", err);
       }
     }, 500);
   }
@@ -1036,33 +985,6 @@ export default function JobDetail() {
             >
               Print A4
             </button>
-            {isMediaJob ? (
-              <>
-                <button
-                  type="button"
-                  onClick={handlePrintMediaSummarySheet}
-                  className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-3 font-medium text-white hover:bg-emerald-500/20"
-                >
-                  Print Summary Sheet
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handlePrintMediaItemSheet}
-                  className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 px-5 py-3 font-medium text-white hover:bg-cyan-500/20"
-                >
-                  Print Media Item Sheet
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                onClick={handlePrintJobSummarySheet}
-                className="rounded-2xl border border-blue-500/30 bg-blue-500/10 px-5 py-3 font-medium text-white hover:bg-blue-500/20"
-              >
-                Print Summary Sheet
-              </button>
-            )}
             <button
               type="button"
               onClick={handleReceiptPrint57mm}

@@ -53,11 +53,35 @@ export default function Layout({ session, profile, profileLoading }) {
           </Link>
 
           <Link
+            to="/jobs/archived"
+            className={navClass("/jobs/archived")}
+            onClick={closeMobileMenu}
+          >
+            Archived Jobs
+          </Link>
+
+          <Link
             to="/jobs/new"
             className={navClass("/jobs/new")}
             onClick={closeMobileMenu}
           >
             New Job
+          </Link>
+
+          <Link
+            to="/media"
+            className={navClass("/media")}
+            onClick={closeMobileMenu}
+          >
+            Media
+          </Link>
+
+          <Link
+            to="/media/archived"
+            className={navClass("/media/archived")}
+            onClick={closeMobileMenu}
+          >
+            Archived Media
           </Link>
 
           <Link

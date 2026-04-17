@@ -352,6 +352,10 @@ export default function Dashboard() {
         serial_number,
         asset_tag,
         service_type,
+        project_name,
+        output_media_type,
+        media_items_json,
+        job_type,
         fault,
         issue,
         status,
@@ -400,6 +404,28 @@ export default function Dashboard() {
       unassigned: jobs.filter((j) => !j.assigned_to).length,
     };
   }, [jobs]);
+
+
+  const mediaJobs = useMemo(() => {
+    return jobs.filter((job) => job.job_type === "media_conversion");
+  }, [jobs]);
+
+  const mediaStats = useMemo(() => {
+    return {
+      total: mediaJobs.length,
+      open: mediaJobs.filter((j) => j.status === "Open").length,
+      inProgress: mediaJobs.filter((j) => j.status === "In Progress").length,
+      waitingParts: mediaJobs.filter((j) => j.status === "Waiting Parts").length,
+      ready: mediaJobs.filter((j) => j.status === "Ready for Collection").length,
+      completed: mediaJobs.filter((j) => j.status === "Completed").length,
+      unpaid: mediaJobs.filter((j) => !j.paid && !j.donated).length,
+      uncollected: mediaJobs.filter((j) => !j.collected).length,
+    };
+  }, [mediaJobs]);
+
+  const recentMediaJobs = useMemo(() => {
+    return mediaJobs.slice(0, 5);
+  }, [mediaJobs]);
 
   const financials = useMemo(() => {
     const totalQuoted = jobs.reduce((sum, job) => sum + numberValue(job.price), 0);
@@ -1130,13 +1156,108 @@ export default function Dashboard() {
         />
       </div>
 
+      <div className="rounded-3xl border border-cyan-500/20 bg-slate-900 p-6 shadow-xl">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <div className="text-sm uppercase tracking-[0.25em] text-cyan-400">
+              Media Conversion
+            </div>
+            <h2 className="mt-2 text-2xl font-semibold text-white">Media Overview</h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Separate headline figures for media conversion projects.
+            </p>
+          </div>
+
+          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
+            <button
+              type="button"
+              onClick={() => navigate("/media/new")}
+              className="w-full rounded-2xl bg-gradient-to-r from-emerald-600 to-cyan-600 px-5 py-3 font-medium text-white shadow-lg hover:opacity-90 sm:w-auto"
+            >
+              + New Media Conversion
+            </button>
+
+            <button
+              type="button"
+              onClick={() => navigate("/media")}
+              className="w-full rounded-2xl border border-cyan-500/30 bg-slate-950 px-5 py-3 font-medium text-white hover:bg-slate-800 sm:w-auto"
+            >
+              View Media Jobs
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <SummaryCard
+            title="Media Projects"
+            value={mediaStats.total}
+            subtitle={`${mediaStats.unpaid} unpaid • ${mediaStats.uncollected} not collected`}
+            onClick={() => navigate("/media")}
+          />
+          <SummaryCard
+            title="Open Media"
+            value={mediaStats.open}
+            onClick={() => navigate("/media")}
+          />
+          <SummaryCard
+            title="Ready for Collection"
+            value={mediaStats.ready}
+            onClick={() => navigate("/media")}
+          />
+          <SummaryCard
+            title="Completed Media"
+            value={mediaStats.completed}
+            onClick={() => navigate("/media")}
+          />
+        </div>
+
+        <div className="mt-6 grid gap-3">
+          {recentMediaJobs.length === 0 ? (
+            <div className="rounded-2xl border border-slate-800 bg-slate-950 p-4 text-sm text-slate-400">
+              No media conversion jobs yet.
+            </div>
+          ) : (
+            recentMediaJobs.map((job) => (
+              <button
+                key={job.id}
+                type="button"
+                onClick={() => navigate(`/jobs/${job.id}`)}
+                className="w-full rounded-2xl border border-slate-800 bg-slate-950 p-4 text-left transition hover:bg-slate-800"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="min-w-0">
+                    <div className="text-sm text-cyan-400">{job.job_number || "—"}</div>
+                    <div className="mt-1 break-words font-medium text-white">
+                      {job.project_name || job.customer || "Media project"}
+                    </div>
+                    <div className="mt-1 break-words text-sm text-slate-400">
+                      {job.output_media_type || "Output not set"}
+                      {Array.isArray(job.media_items_json)
+                        ? ` • ${job.media_items_json.length} item${job.media_items_json.length === 1 ? "" : "s"}`
+                        : ""}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col items-start gap-2 sm:items-end">
+                    <StatusBadge status={job.status} />
+                    <div className="text-xs text-slate-500">
+                      Updated {formatDateTime(job.updated_at || job.created_at)}
+                    </div>
+                  </div>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+
       <div className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
         <h2 className="text-xl font-semibold text-white">Quick Actions</h2>
         <p className="mt-1 text-sm text-slate-400">
           Fast access to the most common workflow actions.
         </p>
 
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
           <button
             type="button"
             onClick={() => navigate("/jobs/new")}
@@ -1178,6 +1299,28 @@ export default function Dashboard() {
             <div className="font-medium text-white">Check Unassigned</div>
             <div className="mt-1 text-sm text-slate-400">
               Find jobs that still need allocating.
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate("/media/new")}
+            className="rounded-2xl border border-slate-800 bg-slate-950 p-5 text-left hover:bg-slate-800"
+          >
+            <div className="font-medium text-white">Create Media Booking</div>
+            <div className="mt-1 text-sm text-slate-400">
+              Book in tapes, discs, film, audio, or digital transfer work.
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate("/media")}
+            className="rounded-2xl border border-slate-800 bg-slate-950 p-5 text-left hover:bg-slate-800"
+          >
+            <div className="font-medium text-white">View Media Jobs</div>
+            <div className="mt-1 text-sm text-slate-400">
+              Open the dedicated media conversion jobs page.
             </div>
           </button>
         </div>
