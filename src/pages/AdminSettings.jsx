@@ -83,7 +83,7 @@ export default function AdminSettings() {
       "TNH TEST PRINT\n\nPrinter bridge is working.\n\n---\n";
 
     const url =
-      "http://localhost:1811/print?text=" + encodeURIComponent(text);
+      "http://127.0.0.1:1811/print?text=" + encodeURIComponent(text);
 
     setPrinterStatus("Opening local printer bridge...");
 
@@ -91,13 +91,15 @@ export default function AdminSettings() {
       const newWindow = window.open(url, "_blank");
 
       if (!newWindow) {
-        setPrinterStatus("Popup blocked or local bridge could not be opened.");
+        setPrinterStatus("Popup blocked or local printer bridge could not be opened.");
         return;
       }
 
-      setPrinterStatus("Print request sent to local bridge.");
+      setPrinterStatus("Print request sent to local printer bridge.");
     } catch (err) {
-      setPrinterStatus(`Error: ${err?.message || "Could not open local printer bridge"}`);
+      setPrinterStatus(
+        `Error: ${err?.message || "Could not open local printer bridge"}`
+      );
     }
   }
 
