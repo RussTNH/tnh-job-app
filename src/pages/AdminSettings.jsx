@@ -1,10 +1,10 @@
 import { useState } from "react";
 
 export default function AdminSettings() {
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState("Idle");
 
   const testPrint = async () => {
-    setStatus("Sending print request...");
+    setStatus("Sending test print...");
 
     try {
       const res = await fetch("http://127.0.0.1:1811/print", {
@@ -12,44 +12,65 @@ export default function AdminSettings() {
         headers: {
           "Content-Type": "text/plain",
         },
-        body: "TNH TEST PRINT\n\nPrinter bridge is working.\n\n---\n",
+        body:
+          "TNH TEST PRINT\n\nPrinter bridge is working.\n\n---\n",
       });
 
       const text = await res.text();
-      setStatus(`Response: ${res.status} ${text}`);
-      alert(`Printer response: ${res.status} ${text}`);
+      setStatus(`Printer response: ${res.status} ${text}`);
     } catch (err) {
-      setStatus(`Error: ${err.message}`);
-      alert(`Printer error: ${err.message}`);
+      const message = err?.message || "Unknown error";
+      setStatus(`Printer error: ${message}`);
     }
   };
 
   return (
     <div style={{ padding: "20px" }}>
-      <h1>ADMIN SETTINGS PAGE TEST</h1>
-      <p style={{ fontWeight: "bold", color: "red" }}>
-        BUILD MARKER: ADMIN SETTINGS LIVE
-      </p>
+      <h1>Admin Settings</h1>
 
-      <button
-        onClick={testPrint}
+      {/* PRINTER SECTION */}
+      <div
         style={{
-          padding: "12px 20px",
-          fontSize: "16px",
-          marginTop: "10px",
-          backgroundColor: "#000",
-          color: "#fff",
-          border: "none",
-          borderRadius: "6px",
-          cursor: "pointer",
+          marginTop: "20px",
+          padding: "20px",
+          border: "1px solid #ddd",
+          borderRadius: "8px",
+          maxWidth: "500px",
         }}
       >
-        Test Printer
-      </button>
+        <h2 style={{ marginBottom: "10px" }}>Printer</h2>
 
-      <p style={{ marginTop: "20px" }}>
-        Status: {status || "Idle"}
-      </p>
+        <p style={{ fontSize: "14px", color: "#666" }}>
+          Use this to test the connection between the web app and the
+          Android printer bridge.
+        </p>
+
+        <button
+          onClick={testPrint}
+          style={{
+            padding: "10px 16px",
+            fontSize: "14px",
+            marginTop: "10px",
+            backgroundColor: "#2563eb",
+            color: "#fff",
+            border: "none",
+            borderRadius: "6px",
+            cursor: "pointer",
+          }}
+        >
+          Test Print
+        </button>
+
+        <div
+          style={{
+            marginTop: "15px",
+            fontSize: "13px",
+            color: "#333",
+          }}
+        >
+          <strong>Status:</strong> {status}
+        </div>
+      </div>
     </div>
   );
 }
