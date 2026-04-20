@@ -78,23 +78,26 @@ export default function AdminSettings() {
     setTimeout(() => setSavedMessage(""), 2500);
   }
 
-  async function testPrint() {
-    setPrinterStatus("Sending test print...");
+  function testPrint() {
+    const text =
+      "TNH TEST PRINT\n\nPrinter bridge is working.\n\n---\n";
+
+    const url =
+      "http://localhost:1811/print?text=" + encodeURIComponent(text);
+
+    setPrinterStatus("Opening local printer bridge...");
 
     try {
-      const res = await fetch("http://127.0.0.1:1811/print", {
-        method: "POST",
-        headers: {
-          "Content-Type": "text/plain",
-        },
-        body:
-          "TNH TEST PRINT\n\nPrinter bridge is working.\n\n---\n",
-      });
+      const newWindow = window.open(url, "_blank");
 
-      const text = await res.text();
-      setPrinterStatus(`Response: ${res.status} ${text}`);
+      if (!newWindow) {
+        setPrinterStatus("Popup blocked or local bridge could not be opened.");
+        return;
+      }
+
+      setPrinterStatus("Print request sent to local bridge.");
     } catch (err) {
-      setPrinterStatus(`Error: ${err?.message || "Failed to fetch"}`);
+      setPrinterStatus(`Error: ${err?.message || "Could not open local printer bridge"}`);
     }
   }
 
@@ -341,8 +344,7 @@ export default function AdminSettings() {
             <section className="rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-xl">
               <h2 className="text-xl font-semibold text-white">Printer Tools</h2>
               <p className="mt-2 text-sm text-slate-400">
-                Use this to test the Android printer bridge on supported POS
-                devices.
+                Use this to test the Android printer bridge on supported POS devices.
               </p>
 
               <button
