@@ -221,7 +221,8 @@ function buildWorkshopReceiptText(job = {}) {
   lines.push(leftRight("Total", money(totalPrice)));
 
   lines.push(divider("="));
-  lines.push(centerText("Thank you for supporting"));
+  lines.push(centerText("Thank you"));
+  lines.push(centerText("for supporting"));
   lines.push(centerText("The Nerd Herd"));
   lines.push(blank());
   lines.push(blank());
