@@ -1,4 +1,5 @@
-const POS_LINE_WIDTH = 24;
+const POS_LINE_WIDTH = 32;
+const POS_CENTER_BIAS = 0;
 
 function toNumber(value) {
   const num = Number(value);
@@ -18,15 +19,15 @@ function repeat(char, count) {
   return new Array(Math.max(0, count) + 1).join(char);
 }
 
-function centerText(text = "", width = POS_LINE_WIDTH) {
+function centerText(text = "", width = POS_LINE_WIDTH, bias = POS_CENTER_BIAS) {
   const clean = safe(text);
   if (!clean) return "";
   if (clean.length >= width) return clean;
 
   const totalPadding = width - clean.length;
-  const leftPadding = Math.floor(totalPadding / 2);
+  const leftPadding = Math.floor(totalPadding / 2) + bias;
 
-  return `${repeat(" ", leftPadding)}${clean}`;
+  return `${repeat(" ", Math.max(0, leftPadding))}${clean}`;
 }
 
 function wrapText(text = "", width = POS_LINE_WIDTH) {
@@ -139,9 +140,9 @@ function buildWorkshopReceiptText(job = {}) {
       ? toNumber(job.price)
       : toNumber(job.labour_cost) + toNumber(job.parts_cost);
 
-  lines.push(centerText("THE NERD HERD"));
-  lines.push(centerText("WORKSHOP HUB"));
-  lines.push(centerText("JOB RECEIPT"));
+  lines.push(centerText("THE NERD HERD", POS_LINE_WIDTH, 1));
+  lines.push(centerText("WORKSHOP HUB", POS_LINE_WIDTH, 1));
+  lines.push(centerText("JOB RECEIPT", POS_LINE_WIDTH, 1));
   lines.push(divider("="));
 
   if (job.job_number) lines.push(leftRight("Job No", safe(job.job_number)));
@@ -224,9 +225,9 @@ function buildWorkshopReceiptText(job = {}) {
   lines.push(leftRight("Total", money(totalPrice)));
 
   lines.push(divider("="));
-  lines.push(centerText("Thank you"));
-  lines.push(centerText("for supporting"));
-  lines.push(centerText("The Nerd Herd"));
+  lines.push(centerText("Thank you", POS_LINE_WIDTH, 1));
+  lines.push(centerText("for supporting", POS_LINE_WIDTH, 1));
+  lines.push(centerText("The Nerd Herd", POS_LINE_WIDTH, 1));
   lines.push(blank());
   lines.push(blank());
   lines.push(blank());
@@ -275,6 +276,7 @@ function printReceiptViaPos({ text, logoPath = "/logo.png" } = {}) {
 
 export {
   POS_LINE_WIDTH,
+  POS_CENTER_BIAS,
   money,
   safe,
   wrapText,
