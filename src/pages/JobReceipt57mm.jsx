@@ -1,37 +1,33 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
-import { printViaBridge } from "../lib/printerBridge";
+import {
+  buildWorkshopReceiptText,
+  formatDateTime,
+  money,
+  printTextViaPos,
+} from "../lib/posPrinter";
 
-function formatDateTime(value) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
+function normaliseParts(parts) {
+  if (!parts) return [];
 
-  return date.toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  if (Array.isArray(parts)) return parts;
+
+  if (typeof parts === "string") {
+    try {
+      const parsed = JSON.parse(parts);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  return [];
 }
 
-function money(value) {
+function field(value) {
   if (value === null || value === undefined || value === "") return "—";
-  const num = Number(value);
-  if (Number.isNaN(num)) return "—";
-  return `£${num.toFixed(2)}`;
-}
-
-function compact(value) {
-  const text = String(value ?? "").trim();
-  return text || "—";
-}
-
-function printable(value) {
-  const text = String(value ?? "").trim();
-  return text || "-";
+  return String(value);
 }
 
 export default function JobReceipt57mm() {
@@ -40,375 +36,338 @@ export default function JobReceipt57mm() {
 
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
-  const [bridgeStatus, setBridgeStatus] = useState("");
+  const [printingPos, setPrintingPos] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    loadJob();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let isMounted = true;
+
+    async function loadJob() {
+      setLoading(true);
+      setError("");
+
+      const { data, error: loadError } = await supabase
+        .from("jobs")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+      if (!isMounted) return;
+
+      if (loadError) {
+        setError(loadError.message || "Failed to load job.");
+        setJob(null);
+      } else {
+        setJob(data);
+      }
+
+      setLoading(false);
+    }
+
+    if (id) {
+      loadJob();
+    } else {
+      setError("Missing job ID.");
+      setLoading(false);
+    }
+
+    return () => {
+      isMounted = false;
+    };
   }, [id]);
 
-  async function loadJob() {
-    setLoading(true);
-    setLoadError("");
+  const parts = useMemo(() => normaliseParts(job?.parts_json), [job?.parts_json]);
 
-    const { data, error } = await supabase
-      .from("jobs")
-      .select(`
-        id,
-        job_number,
-        customer,
-        contact,
-        email,
-        phone,
-        device,
-        make,
-        model,
-        serial_number,
-        asset_tag,
-        service_type,
-        fault,
-        issue,
-        status,
-        assigned_to_name,
-        notes,
-        price,
-        labour_cost,
-        parts_cost,
-        paid,
-        donated,
-        collected,
-        created_at,
-        updated_at
-      `)
-      .eq("id", id)
-      .single();
+  const totalPrice = useMemo(() => {
+    if (!job) return 0;
 
-    if (error) {
-      console.error("Receipt load error:", error);
-      setLoadError(error.message || "Could not load job");
-      setJob(null);
-      setLoading(false);
-      return;
+    if (job.price !== null && job.price !== undefined && job.price !== "") {
+      const num = Number(job.price);
+      return Number.isFinite(num) ? num : 0;
     }
 
-    setJob(data);
-    setLoading(false);
-  }
+    const labour = Number(job.labour_cost || 0);
+    const partsTotal = Number(job.parts_cost || 0);
 
-  const summary = useMemo(() => {
-    if (!job) return null;
-
-    return {
-      makeModel: [job.make, job.model].filter(Boolean).join(" "),
-      paidLabel: job.donated ? "DONATED" : job.paid ? "PAID" : "UNPAID",
-      collectedLabel: job.collected ? "COLLECTED" : "NOT COLLECTED",
-    };
+    return (Number.isFinite(labour) ? labour : 0) + (Number.isFinite(partsTotal) ? partsTotal : 0);
   }, [job]);
 
-  function buildBridgeReceipt(currentJob, currentSummary) {
-    if (!currentJob || !currentSummary) return "";
+  const receiptText = useMemo(() => {
+    if (!job) return "";
+    return buildWorkshopReceiptText(job);
+  }, [job]);
 
-    const lines = [
-      "THE NERD HERD",
-      "WORKSHOP HUB",
-      "JOB RECEIPT",
-      "------------------------------",
-      `JOB NO: ${printable(currentJob.job_number)}`,
-      `CREATED: ${printable(formatDateTime(currentJob.created_at))}`,
-      `UPDATED: ${printable(formatDateTime(currentJob.updated_at))}`,
-      "------------------------------",
-      `CUSTOMER: ${printable(currentJob.customer)}`,
-      `CONTACT: ${printable(currentJob.contact || currentJob.phone || currentJob.email)}`,
-      "------------------------------",
-      `DEVICE: ${printable(currentJob.device)}`,
-      `MAKE/MODEL: ${printable(currentSummary.makeModel)}`,
-      `SERIAL: ${printable(currentJob.serial_number)}`,
-      `ASSET TAG: ${printable(currentJob.asset_tag)}`,
-      `SERVICE: ${printable(currentJob.service_type)}`,
-      "------------------------------",
-      `FAULT: ${printable(currentJob.fault)}`,
-      `ISSUE: ${printable(currentJob.issue)}`,
-      "------------------------------",
-      `STATUS: ${printable(currentJob.status)}`,
-      `ENGINEER: ${printable(currentJob.assigned_to_name)}`,
-      `PAYMENT: ${printable(currentSummary.paidLabel)}`,
-      `COLLECTION: ${printable(currentSummary.collectedLabel)}`,
-      "------------------------------",
-      `PRICE: ${printable(money(currentJob.price))}`,
-      `LABOUR: ${printable(money(currentJob.labour_cost))}`,
-      `PARTS: ${printable(money(currentJob.parts_cost))}`,
-    ];
+  async function handlePosPrint() {
+    if (!receiptText) return;
 
-    if (currentJob.notes && String(currentJob.notes).trim()) {
-      lines.push(
-        "------------------------------",
-        "NOTES:",
-        String(currentJob.notes).trim()
-      );
+    try {
+      setPrintingPos(true);
+      printTextViaPos(receiptText);
+    } catch (err) {
+      alert(err?.message || "POS print failed.");
+    } finally {
+      setTimeout(() => setPrintingPos(false), 1200);
     }
-
-    lines.push(
-      "------------------------------",
-      "Please keep this receipt",
-      "for your records.",
-      "Thank you.",
-      "",
-      ""
-    );
-
-    return lines.join("\n");
   }
 
   function handleBrowserPrint() {
     window.print();
   }
 
-  function handleBridgePrint() {
-    if (!job || !summary) return;
-
-    try {
-      const text = buildBridgeReceipt(job, summary);
-      printViaBridge(text);
-      setBridgeStatus("Opening TNH Printer Bridge...");
-    } catch (err) {
-      setBridgeStatus(
-        `Could not open TNH Printer Bridge: ${err?.message || "Unknown error"}`
-      );
-    }
-  }
-
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 p-6 text-white">
-        Loading receipt...
+      <div className="min-h-screen bg-neutral-950 text-white px-4 py-6">
+        <div className="mx-auto max-w-md">
+          <div className="rounded-2xl border border-neutral-800 bg-neutral-900 p-6 shadow-xl">
+            <p className="text-sm text-neutral-300">Loading receipt…</p>
+          </div>
+        </div>
       </div>
     );
   }
 
-  if (loadError) {
+  if (error || !job) {
     return (
-      <div className="min-h-screen bg-slate-950 p-6 text-rose-300">
-        Could not load receipt: {loadError}
-      </div>
-    );
-  }
-
-  if (!job || !summary) {
-    return (
-      <div className="min-h-screen bg-slate-950 p-6 text-white">
-        Job not found.
+      <div className="min-h-screen bg-neutral-950 text-white px-4 py-6">
+        <div className="mx-auto max-w-md">
+          <div className="rounded-2xl border border-red-900/40 bg-neutral-900 p-6 shadow-xl">
+            <h1 className="text-lg font-semibold text-white">Receipt unavailable</h1>
+            <p className="mt-2 text-sm text-red-300">{error || "Job not found."}</p>
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="mt-4 inline-flex items-center rounded-xl bg-white px-4 py-2 text-sm font-medium text-black transition hover:opacity-90"
+            >
+              Go back
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
     <>
-      <style>{`
-        @page {
-          size: 57mm auto;
-          margin: 3mm;
-        }
+      <style>
+        {`
+          @media print {
+            body {
+              background: #ffffff !important;
+            }
 
-        @media print {
-          html, body {
-            width: 57mm;
-            background: #fff !important;
-            margin: 0;
-            padding: 0;
+            .no-print {
+              display: none !important;
+            }
+
+            .receipt-print-shell {
+              background: #ffffff !important;
+              padding: 0 !important;
+              margin: 0 !important;
+              min-height: auto !important;
+            }
+
+            .receipt-paper {
+              width: 57mm !important;
+              max-width: 57mm !important;
+              min-width: 57mm !important;
+              border: 0 !important;
+              border-radius: 0 !important;
+              box-shadow: none !important;
+              margin: 0 auto !important;
+              padding: 3mm !important;
+              background: #ffffff !important;
+              color: #000000 !important;
+            }
+
+            .receipt-paper * {
+              color: #000000 !important;
+            }
+
+            @page {
+              size: 57mm auto;
+              margin: 2mm;
+            }
           }
+        `}
+      </style>
 
-          .no-print {
-            display: none !important;
-          }
-
-          .receipt-wrap {
-            width: 51mm;
-            max-width: 51mm;
-            margin: 0 auto;
-            color: #000 !important;
-            background: #fff !important;
-            box-shadow: none !important;
-            border: none !important;
-          }
-        }
-      `}</style>
-
-      <div className="min-h-screen bg-slate-950 p-4 text-white">
-        <div className="no-print mx-auto mb-4 flex w-full max-w-md flex-wrap gap-3">
+      <div className="receipt-print-shell min-h-screen bg-neutral-950 px-4 py-6 text-white">
+        <div className="no-print mx-auto mb-4 flex max-w-md flex-wrap gap-3">
           <button
             type="button"
-            onClick={() => navigate(`/jobs/${id}`)}
-            className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-white hover:bg-slate-800"
+            onClick={() => navigate(-1)}
+            className="inline-flex items-center rounded-xl border border-neutral-700 bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800"
           >
-            Back to Job
+            Back
           </button>
 
           <button
             type="button"
-            onClick={handleBridgePrint}
-            className="rounded-2xl bg-gradient-to-r from-blue-600 to-violet-600 px-4 py-3 text-white hover:opacity-90"
+            onClick={handlePosPrint}
+            disabled={printingPos}
+            className="inline-flex items-center rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-black transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Print via POS
+            {printingPos ? "Sending to POS…" : "Print via POS"}
           </button>
 
           <button
             type="button"
             onClick={handleBrowserPrint}
-            className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-white hover:bg-slate-800"
+            className="inline-flex items-center rounded-xl border border-neutral-700 bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800"
           >
             Print via Browser
           </button>
         </div>
 
-        {bridgeStatus ? (
-          <div className="no-print mx-auto mb-4 w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 px-4 py-3 text-sm text-slate-300">
-            {bridgeStatus}
-          </div>
-        ) : null}
-
-        <div className="receipt-wrap mx-auto w-full max-w-md rounded-2xl border border-slate-800 bg-white p-4 text-black shadow-xl">
-          <div className="text-center">
-            <div className="text-[15px] font-bold">WORKSHOP HUB</div>
-            <div className="mt-1 text-[11px]">JOB RECEIPT</div>
+        <div className="mx-auto max-w-md">
+          <div className="no-print mb-4 rounded-2xl border border-neutral-800 bg-neutral-900 p-4 shadow-xl">
+            <h1 className="text-lg font-semibold text-white">57mm Job Receipt</h1>
+            <p className="mt-1 text-sm text-neutral-400">
+              POS print uses the Android bridge. Browser print remains available for PDF and normal printers.
+            </p>
           </div>
 
-          <div className="my-3 border-t border-dashed border-black" />
-
-          <div className="space-y-1 text-[11px] leading-tight">
-            <div className="flex justify-between gap-3">
-              <span className="font-semibold">Job No:</span>
-              <span className="text-right">{compact(job.job_number)}</span>
+          <div className="receipt-paper mx-auto w-[57mm] max-w-[57mm] rounded-2xl border border-neutral-800 bg-white p-3 text-black shadow-2xl">
+            <div className="text-center">
+              <div className="text-[13px] font-bold tracking-[0.18em]">THE NERD HERD</div>
+              <div className="text-[10px] font-semibold tracking-[0.18em]">WORKSHOP HUB</div>
+              <div className="mt-1 text-[10px] font-medium">JOB RECEIPT</div>
             </div>
 
-            <div className="flex justify-between gap-3">
-              <span className="font-semibold">Created:</span>
-              <span className="text-right">{formatDateTime(job.created_at)}</span>
+            <div className="my-2 border-t border-dashed border-black" />
+
+            <div className="space-y-1 text-[10px] leading-tight">
+              <div className="flex items-start justify-between gap-2">
+                <span className="font-semibold">Job No</span>
+                <span className="text-right">{field(job.job_number)}</span>
+              </div>
+
+              <div className="flex items-start justify-between gap-2">
+                <span className="font-semibold">Created</span>
+                <span className="text-right">{field(formatDateTime(job.created_at))}</span>
+              </div>
+
+              <div className="flex items-start justify-between gap-2">
+                <span className="font-semibold">Updated</span>
+                <span className="text-right">{field(formatDateTime(job.updated_at))}</span>
+              </div>
             </div>
 
-            <div className="flex justify-between gap-3">
-              <span className="font-semibold">Updated:</span>
-              <span className="text-right">{formatDateTime(job.updated_at)}</span>
-            </div>
-          </div>
-
-          <div className="my-3 border-t border-dashed border-black" />
-
-          <div className="space-y-1 text-[11px] leading-tight">
-            <div>
-              <div className="font-semibold">Customer</div>
-              <div>{compact(job.customer)}</div>
-            </div>
-
-            <div>
-              <div className="font-semibold">Contact</div>
-              <div>{compact(job.contact || job.phone || job.email)}</div>
-            </div>
-          </div>
-
-          <div className="my-3 border-t border-dashed border-black" />
-
-          <div className="space-y-1 text-[11px] leading-tight">
-            <div>
-              <div className="font-semibold">Device</div>
-              <div>{compact(job.device)}</div>
-            </div>
+            <div className="my-2 border-t border-dashed border-black" />
 
             <div>
-              <div className="font-semibold">Make / Model</div>
-              <div>{compact(summary.makeModel)}</div>
+              <div className="mb-1 text-[10px] font-bold uppercase tracking-wide">Customer</div>
+              <div className="space-y-1 text-[10px] leading-tight">
+                <div><span className="font-semibold">Name:</span> {field(job.customer_name)}</div>
+                <div><span className="font-semibold">Phone:</span> {field(job.customer_phone)}</div>
+                <div><span className="font-semibold">Email:</span> {field(job.customer_email)}</div>
+              </div>
             </div>
+
+            <div className="my-2 border-t border-dashed border-black" />
 
             <div>
-              <div className="font-semibold">Serial Number</div>
-              <div>{compact(job.serial_number)}</div>
+              <div className="mb-1 text-[10px] font-bold uppercase tracking-wide">Device</div>
+              <div className="space-y-1 text-[10px] leading-tight">
+                <div><span className="font-semibold">Type:</span> {field(job.device_type)}</div>
+                <div><span className="font-semibold">Brand:</span> {field(job.brand)}</div>
+                <div><span className="font-semibold">Model:</span> {field(job.model)}</div>
+                <div><span className="font-semibold">Serial:</span> {field(job.serial_number)}</div>
+                <div><span className="font-semibold">Status:</span> {field(job.status)}</div>
+              </div>
             </div>
+
+            <div className="my-2 border-t border-dashed border-black" />
 
             <div>
-              <div className="font-semibold">Asset Tag</div>
-              <div>{compact(job.asset_tag)}</div>
+              <div className="mb-1 text-[10px] font-bold uppercase tracking-wide">Fault / Work</div>
+              <div className="whitespace-pre-wrap text-[10px] leading-tight">
+                {field(job.fault)}
+              </div>
             </div>
+
+            {job.notes ? (
+              <>
+                <div className="my-2 border-t border-dashed border-black" />
+                <div>
+                  <div className="mb-1 text-[10px] font-bold uppercase tracking-wide">Notes</div>
+                  <div className="whitespace-pre-wrap text-[10px] leading-tight">
+                    {job.notes}
+                  </div>
+                </div>
+              </>
+            ) : null}
+
+            {parts.length > 0 ? (
+              <>
+                <div className="my-2 border-t border-dashed border-black" />
+                <div>
+                  <div className="mb-1 text-[10px] font-bold uppercase tracking-wide">Parts</div>
+                  <div className="space-y-1 text-[10px] leading-tight">
+                    {parts.map((part, index) => {
+                      const name =
+                        part?.name ||
+                        part?.part_name ||
+                        part?.description ||
+                        `Part ${index + 1}`;
+
+                      const qty =
+                        part?.qty !== undefined && part?.qty !== null && part?.qty !== ""
+                          ? `x${part.qty}`
+                          : "";
+
+                      const price =
+                        part?.price !== undefined && part?.price !== null && part?.price !== ""
+                          ? money(part.price)
+                          : "—";
+
+                      return (
+                        <div key={`${name}-${index}`} className="flex items-start justify-between gap-2">
+                          <span className="pr-2">
+                            {name} {qty}
+                          </span>
+                          <span className="min-w-[48px] text-right">{price}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            ) : null}
+
+            <div className="my-2 border-t border-dashed border-black" />
 
             <div>
-              <div className="font-semibold">Service Type</div>
-              <div>{compact(job.service_type)}</div>
-            </div>
-          </div>
-
-          <div className="my-3 border-t border-dashed border-black" />
-
-          <div className="space-y-1 text-[11px] leading-tight">
-            <div>
-              <div className="font-semibold">Fault</div>
-              <div>{compact(job.fault)}</div>
-            </div>
-
-            <div>
-              <div className="font-semibold">Issue</div>
-              <div>{compact(job.issue)}</div>
-            </div>
-          </div>
-
-          <div className="my-3 border-t border-dashed border-black" />
-
-          <div className="space-y-1 text-[11px] leading-tight">
-            <div className="flex justify-between gap-3">
-              <span className="font-semibold">Status:</span>
-              <span className="text-right">{compact(job.status)}</span>
-            </div>
-
-            <div className="flex justify-between gap-3">
-              <span className="font-semibold">Engineer:</span>
-              <span className="text-right">{compact(job.assigned_to_name)}</span>
-            </div>
-
-            <div className="flex justify-between gap-3">
-              <span className="font-semibold">Payment:</span>
-              <span className="text-right">{summary.paidLabel}</span>
-            </div>
-
-            <div className="flex justify-between gap-3">
-              <span className="font-semibold">Collection:</span>
-              <span className="text-right">{summary.collectedLabel}</span>
-            </div>
-          </div>
-
-          <div className="my-3 border-t border-dashed border-black" />
-
-          <div className="space-y-1 text-[11px] leading-tight">
-            <div className="flex justify-between gap-3">
-              <span className="font-semibold">Price:</span>
-              <span>{money(job.price)}</span>
-            </div>
-
-            <div className="flex justify-between gap-3">
-              <span className="font-semibold">Labour:</span>
-              <span>{money(job.labour_cost)}</span>
-            </div>
-
-            <div className="flex justify-between gap-3">
-              <span className="font-semibold">Parts:</span>
-              <span>{money(job.parts_cost)}</span>
-            </div>
-          </div>
-
-          {job.notes ? (
-            <>
-              <div className="my-3 border-t border-dashed border-black" />
-              <div className="text-[11px] leading-tight">
-                <div className="font-semibold">Notes</div>
-                <div className="mt-1 whitespace-pre-wrap break-words">
-                  {job.notes}
+              <div className="mb-1 text-[10px] font-bold uppercase tracking-wide">Totals</div>
+              <div className="space-y-1 text-[10px] leading-tight">
+                <div className="flex items-start justify-between gap-2">
+                  <span>Labour</span>
+                  <span className="text-right">{money(job.labour_cost)}</span>
+                </div>
+                <div className="flex items-start justify-between gap-2">
+                  <span>Parts</span>
+                  <span className="text-right">{money(job.parts_cost)}</span>
+                </div>
+                <div className="flex items-start justify-between gap-2 border-t border-dashed border-black pt-1 font-bold">
+                  <span>Total</span>
+                  <span className="text-right">{money(totalPrice)}</span>
                 </div>
               </div>
-            </>
-          ) : null}
+            </div>
 
-          <div className="my-3 border-t border-dashed border-black" />
+            <div className="my-2 border-t border-dashed border-black" />
 
-          <div className="text-center text-[10px] leading-tight">
-            <div>Please keep this receipt for your records.</div>
-            <div className="mt-1">Thank you.</div>
+            <div className="pt-1 text-center text-[10px] leading-tight">
+              <div>Thank you for supporting</div>
+              <div className="font-semibold">The Nerd Herd</div>
+            </div>
+          </div>
+
+          <div className="no-print mt-4 rounded-2xl border border-neutral-800 bg-neutral-900 p-4 shadow-xl">
+            <h2 className="text-sm font-semibold text-white">POS Preview Text</h2>
+            <pre className="mt-3 overflow-x-auto rounded-xl border border-neutral-800 bg-black/40 p-3 text-[11px] leading-5 text-neutral-300">
+{receiptText}
+            </pre>
           </div>
         </div>
       </div>
