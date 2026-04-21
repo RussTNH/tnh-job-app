@@ -201,7 +201,10 @@ function buildWorkshopReceiptText(job = {}) {
           : "";
 
       const label = qty ? `${name} ${qty}` : name;
-      const wrapped = wrapText(label, priceValue ? POS_LINE_WIDTH - priceValue.length - 1 : POS_LINE_WIDTH);
+      const wrapped = wrapText(
+        label,
+        priceValue ? POS_LINE_WIDTH - priceValue.length - 1 : POS_LINE_WIDTH
+      );
 
       if (wrapped.length === 0) return;
 
@@ -231,13 +234,42 @@ function buildWorkshopReceiptText(job = {}) {
   return lines.join("\n");
 }
 
-function printTextViaPos(text) {
+function buildAbsoluteUrl(path = "") {
+  const cleanPath = safe(path);
+  if (!cleanPath) return "";
+
+  if (/^https?:\/\//i.test(cleanPath)) return cleanPath;
+
+  const origin = window.location.origin || "";
+  if (!origin) return cleanPath;
+
+  return `${origin}${cleanPath.startsWith("/") ? cleanPath : `/${cleanPath}`}`;
+}
+
+function buildPosPrintUrl({ text, logoUrl } = {}) {
   const payload = safe(text);
-  if (!payload) {
+  const logo = safe(logoUrl);
+
+  if (!payload && !logo) {
     throw new Error("Nothing to print.");
   }
 
-  const url = `tnhprinter://print?text=${encodeURIComponent(payload)}`;
+  const params = new URLSearchParams();
+
+  if (logo) params.set("logoUrl", logo);
+  if (payload) params.set("text", payload);
+
+  return `tnhprinter://print?${params.toString()}`;
+}
+
+function printTextViaPos(text) {
+  const url = buildPosPrintUrl({ text });
+  window.location.href = url;
+}
+
+function printReceiptViaPos({ text, logoPath = "/logo.png" } = {}) {
+  const logoUrl = buildAbsoluteUrl(logoPath);
+  const url = buildPosPrintUrl({ text, logoUrl });
   window.location.href = url;
 }
 
@@ -251,5 +283,8 @@ export {
   divider,
   formatDateTime,
   buildWorkshopReceiptText,
+  buildAbsoluteUrl,
+  buildPosPrintUrl,
   printTextViaPos,
+  printReceiptViaPos,
 };
