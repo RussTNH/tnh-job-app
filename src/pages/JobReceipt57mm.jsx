@@ -104,7 +104,7 @@ export default function JobReceipt57mm() {
       setPrintingPos(true);
       printReceiptViaPos({
         text: receiptText,
-        logoPath: "/logo.png",
+        logoPath: "/logo-mono.png",
       });
     } catch (err) {
       alert(err?.message || "POS print failed.");
@@ -226,14 +226,14 @@ export default function JobReceipt57mm() {
           <div className="no-print mb-4 rounded-2xl border border-neutral-800 bg-neutral-900 p-4 shadow-xl">
             <h1 className="text-lg font-semibold text-white">57mm Job Receipt</h1>
             <p className="mt-1 text-sm text-neutral-400">
-              POS print now sends the receipt logo and receipt text to the Android bridge. Browser print still works for PDF and normal printers.
+              Web view uses the colour logo. POS print uses the monochrome logo through the Android bridge.
             </p>
           </div>
 
           <div className="receipt-paper mx-auto w-[57mm] max-w-[57mm] rounded-2xl border border-neutral-800 bg-white p-3 text-black shadow-2xl">
             <div className="text-center">
               <img
-                src="/logo.png"
+                src="/logo-colour.png"
                 alt="The Nerd Herd"
                 className="mx-auto mb-2 max-h-[18mm] w-auto max-w-[42mm] object-contain"
               />
