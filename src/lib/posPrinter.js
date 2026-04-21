@@ -1,5 +1,5 @@
 const POS_LINE_WIDTH = 32;
-const POS_CENTER_BIAS = 0;
+const POS_CENTER_BIAS = 1;
 
 function toNumber(value) {
   const num = Number(value);
@@ -81,7 +81,6 @@ function leftRight(left = "", right = "", width = POS_LINE_WIDTH) {
   const r = safe(right);
 
   if (!l && !r) return "";
-
   if (r.length >= width) return r.slice(0, width);
 
   const spaceAvailable = width - r.length;
@@ -247,17 +246,19 @@ function buildAbsoluteUrl(path = "") {
   return `${origin}${cleanPath.startsWith("/") ? cleanPath : `/${cleanPath}`}`;
 }
 
-function buildPosPrintUrl({ text, logoUrl } = {}) {
+function buildPosPrintUrl({ text, header, logoUrl } = {}) {
   const payload = safe(text);
+  const headerText = safe(header);
   const logo = safe(logoUrl);
 
-  if (!payload && !logo) {
+  if (!payload && !headerText && !logo) {
     throw new Error("Nothing to print.");
   }
 
   const params = new URLSearchParams();
 
   if (logo) params.set("logoUrl", logo);
+  if (headerText) params.set("header", headerText);
   if (payload) params.set("text", payload);
 
   return `tnhprinter://print?${params.toString()}`;
@@ -270,7 +271,17 @@ function printTextViaPos(text) {
 
 function printReceiptViaPos({ text, logoPath = "/logo.png" } = {}) {
   const logoUrl = buildAbsoluteUrl(logoPath);
-  const url = buildPosPrintUrl({ text, logoUrl });
+  const lines = safe(text).split("\n");
+
+  const headerLines = lines.slice(0, 3).map((line) => line.trim()).filter(Boolean);
+  const remainingLines = lines.slice(3).join("\n");
+
+  const url = buildPosPrintUrl({
+    logoUrl,
+    header: headerLines.join("\n"),
+    text: remainingLines,
+  });
+
   window.location.href = url;
 }
 
