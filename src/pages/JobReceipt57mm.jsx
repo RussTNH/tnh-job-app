@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
+import { printViaBridge } from "../lib/printerBridge";
 
 function formatDateTime(value) {
   if (!value) return "—";
@@ -28,61 +29,9 @@ function compact(value) {
   return text || "—";
 }
 
-function printValue(value) {
+function printable(value) {
   const text = String(value ?? "").trim();
   return text || "-";
-}
-
-function buildBridgeReceipt(job, summary) {
-  const lines = [
-    "THE NERD HERD",
-    "WORKSHOP HUB",
-    "JOB RECEIPT",
-    "------------------------------",
-    `JOB NO: ${printValue(job.job_number)}`,
-    `CREATED: ${printValue(formatDateTime(job.created_at))}`,
-    `UPDATED: ${printValue(formatDateTime(job.updated_at))}`,
-    "------------------------------",
-    `CUSTOMER: ${printValue(job.customer)}`,
-    `CONTACT: ${printValue(job.contact || job.phone || job.email)}`,
-    "------------------------------",
-    `DEVICE: ${printValue(job.device)}`,
-    `MAKE/MODEL: ${printValue(summary.makeModel)}`,
-    `SERIAL: ${printValue(job.serial_number)}`,
-    `ASSET TAG: ${printValue(job.asset_tag)}`,
-    `SERVICE: ${printValue(job.service_type)}`,
-    "------------------------------",
-    `FAULT: ${printValue(job.fault)}`,
-    `ISSUE: ${printValue(job.issue)}`,
-    "------------------------------",
-    `STATUS: ${printValue(job.status)}`,
-    `ENGINEER: ${printValue(job.assigned_to_name)}`,
-    `PAYMENT: ${printValue(summary.paidLabel)}`,
-    `COLLECTION: ${printValue(summary.collectedLabel)}`,
-    "------------------------------",
-    `PRICE: ${printValue(money(job.price))}`,
-    `LABOUR: ${printValue(money(job.labour_cost))}`,
-    `PARTS: ${printValue(money(job.parts_cost))}`,
-  ];
-
-  if (job.notes && String(job.notes).trim()) {
-    lines.push(
-      "------------------------------",
-      "NOTES:",
-      String(job.notes).trim()
-    );
-  }
-
-  lines.push(
-    "------------------------------",
-    "Please keep this receipt",
-    "for your records.",
-    "Thank you.",
-    "",
-    ""
-  );
-
-  return lines.join("\n");
 }
 
 export default function JobReceipt57mm() {
@@ -157,6 +106,60 @@ export default function JobReceipt57mm() {
     };
   }, [job]);
 
+  function buildBridgeReceipt(currentJob, currentSummary) {
+    if (!currentJob || !currentSummary) return "";
+
+    const lines = [
+      "THE NERD HERD",
+      "WORKSHOP HUB",
+      "JOB RECEIPT",
+      "------------------------------",
+      `JOB NO: ${printable(currentJob.job_number)}`,
+      `CREATED: ${printable(formatDateTime(currentJob.created_at))}`,
+      `UPDATED: ${printable(formatDateTime(currentJob.updated_at))}`,
+      "------------------------------",
+      `CUSTOMER: ${printable(currentJob.customer)}`,
+      `CONTACT: ${printable(currentJob.contact || currentJob.phone || currentJob.email)}`,
+      "------------------------------",
+      `DEVICE: ${printable(currentJob.device)}`,
+      `MAKE/MODEL: ${printable(currentSummary.makeModel)}`,
+      `SERIAL: ${printable(currentJob.serial_number)}`,
+      `ASSET TAG: ${printable(currentJob.asset_tag)}`,
+      `SERVICE: ${printable(currentJob.service_type)}`,
+      "------------------------------",
+      `FAULT: ${printable(currentJob.fault)}`,
+      `ISSUE: ${printable(currentJob.issue)}`,
+      "------------------------------",
+      `STATUS: ${printable(currentJob.status)}`,
+      `ENGINEER: ${printable(currentJob.assigned_to_name)}`,
+      `PAYMENT: ${printable(currentSummary.paidLabel)}`,
+      `COLLECTION: ${printable(currentSummary.collectedLabel)}`,
+      "------------------------------",
+      `PRICE: ${printable(money(currentJob.price))}`,
+      `LABOUR: ${printable(money(currentJob.labour_cost))}`,
+      `PARTS: ${printable(money(currentJob.parts_cost))}`,
+    ];
+
+    if (currentJob.notes && String(currentJob.notes).trim()) {
+      lines.push(
+        "------------------------------",
+        "NOTES:",
+        String(currentJob.notes).trim()
+      );
+    }
+
+    lines.push(
+      "------------------------------",
+      "Please keep this receipt",
+      "for your records.",
+      "Thank you.",
+      "",
+      ""
+    );
+
+    return lines.join("\n");
+  }
+
   function handleBrowserPrint() {
     window.print();
   }
@@ -164,11 +167,9 @@ export default function JobReceipt57mm() {
   function handleBridgePrint() {
     if (!job || !summary) return;
 
-    const text = buildBridgeReceipt(job, summary);
-    const url = "tnhprinter://print?text=" + encodeURIComponent(text);
-
     try {
-      window.location.href = url;
+      const text = buildBridgeReceipt(job, summary);
+      printViaBridge(text);
       setBridgeStatus("Opening TNH Printer Bridge...");
     } catch (err) {
       setBridgeStatus(
@@ -248,7 +249,7 @@ export default function JobReceipt57mm() {
             onClick={handleBridgePrint}
             className="rounded-2xl bg-gradient-to-r from-blue-600 to-violet-600 px-4 py-3 text-white hover:opacity-90"
           >
-            Print via Bridge
+            Print via POS
           </button>
 
           <button
@@ -256,7 +257,7 @@ export default function JobReceipt57mm() {
             onClick={handleBrowserPrint}
             className="rounded-2xl border border-slate-700 bg-slate-900 px-4 py-3 text-white hover:bg-slate-800"
           >
-            Browser Print
+            Print via Browser
           </button>
         </div>
 
