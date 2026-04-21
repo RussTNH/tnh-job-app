@@ -226,7 +226,7 @@ export default function JobReceipt57mm() {
           <div className="no-print mb-4 rounded-2xl border border-neutral-800 bg-neutral-900 p-4 shadow-xl">
             <h1 className="text-lg font-semibold text-white">57mm Job Receipt</h1>
             <p className="mt-1 text-sm text-neutral-400">
-              Web view uses the colour logo. POS print uses the monochrome logo through the Android bridge.
+              Web receipt uses the colour logo. POS print uses the monochrome logo.
             </p>
           </div>
 
