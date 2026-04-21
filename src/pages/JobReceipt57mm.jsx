@@ -229,9 +229,15 @@ export default function JobReceipt57mm() {
 
           <div className="receipt-paper mx-auto w-[57mm] max-w-[57mm] rounded-2xl border border-neutral-800 bg-white p-3 text-black shadow-2xl">
             <div className="text-center">
-              <div className="text-[13px] font-bold tracking-[0.18em]">THE NERD HERD</div>
-              <div className="text-[10px] font-semibold tracking-[0.18em]">WORKSHOP HUB</div>
-              <div className="mt-1 text-[10px] font-medium">JOB RECEIPT</div>
+              <img
+                src="/logo.png"
+                alt="The Nerd Herd"
+                className="mx-auto mb-2 w-[42mm] object-contain"
+              />
+
+                <div className="text-[12px] font-bold tracking-[0.18em]">THE NERD HERD</div>
+                <div className="text-[10px] font-semibold tracking-[0.18em]">WORKSHOP HUB</div>
+                <div className="mt-1 text-[10px] font-medium">JOB RECEIPT</div>
             </div>
 
             <div className="my-2 border-t border-dashed border-black" />

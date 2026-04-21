@@ -1,4 +1,4 @@
-const POS_LINE_WIDTH = 32;
+const POS_LINE_WIDTH = 30;
 
 function toNumber(value) {
   const num = Number(value);
