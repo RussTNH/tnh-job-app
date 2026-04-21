@@ -218,10 +218,17 @@ export default function MediaSummarySheet() {
 
       <div className="border-2 border-black p-4">
         <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold">The Nerd Herd</h1>
-            <div className="mt-1 text-sm text-slate-700">
-              Media Conversion Summary Sheet
+          <div className="flex items-start gap-4">
+            <img
+              src="/logo-colour.png"
+              alt="The Nerd Herd"
+              className="h-20 w-20 object-contain"
+            />
+            <div>
+              <h1 className="text-3xl font-bold">The Nerd Herd</h1>
+              <div className="mt-1 text-sm text-slate-700">
+                Media Conversion Summary Sheet
+              </div>
             </div>
           </div>
 
