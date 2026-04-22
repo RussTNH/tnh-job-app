@@ -142,6 +142,7 @@ export default function CreateJob() {
           ? assignedUser.full_name || assignedUser.email
           : null,
         parts_json: JSON.stringify([]),
+        job_type: "standard",
       };
 
       const { data, error } = await supabase

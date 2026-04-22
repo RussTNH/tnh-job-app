@@ -255,7 +255,7 @@ export default function Jobs() {
         job_type,
         archived
       `)
-      .neq("job_type", "media_conversion")
+      .or("job_type.is.null,job_type.eq.standard")
       .eq("archived", false)
       .order("created_at", { ascending: false });
 
